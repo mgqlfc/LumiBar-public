@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable></PropertyGroup>
+  <ItemGroup><Compile Include="../LumiBar/Backend/*.cs" Link="Backend/%(Filename)%(Extension)" /><Compile Include="../LumiBar/Models.cs" Link="Models.cs" /><Compile Include="../../outputs/Antigravity前端接入包/LumiBarClient.cs" Link="LumiBarClient.cs" /></ItemGroup>
+  <ItemGroup><Compile Include="../LumiBar/SurfaceLifetime.cs" Link="SurfaceLifetime.cs" /><Compile Include="../LumiBar/AlbumLightColor.cs" Link="AlbumLightColor.cs" /></ItemGroup>
+  <ItemGroup><EmbeddedResource Include="../LumiBar/Assets/default-settings.json" LogicalName="LumiBar.DefaultSettings.json" /></ItemGroup>
+  <ItemGroup><Compile Include="../../outputs/Antigravity前端接入包/PluginMenusExample.cs" Link="PluginMenusExample.cs" /></ItemGroup>
+</Project>

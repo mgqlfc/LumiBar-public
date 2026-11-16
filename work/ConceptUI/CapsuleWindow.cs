@@ -1,0 +1,45 @@
+using Microsoft.UI;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Imaging;
+using Windows.Storage.Streams;
+namespace LumiBar;
+// Shared by the actual preview capsule and Appearance > effect preview.
+internal sealed class MusicCapsuleContent:Grid
+{
+    private readonly AlbumAtmosphere _album=new(true);private readonly SpectrumBackdrop _spectrum=new();private readonly Image _cover;private readonly TextBlock _title,_artist;private readonly MarqueeTitle _marquee;private readonly StackPanel _names=Ui.Stack(0);private readonly Button _open;private readonly Grid _row=new(){ColumnSpacing=8};private bool _lite;private string? _key;private readonly bool _large;
+    internal MusicCapsuleContent(bool large=false)
+    {
+        _large=large;var size=large?40:28;_cover=new(){Width=size,Height=size,Stretch=Stretch.UniformToFill};_title=Ui.Text("",large?15:13);_artist=Ui.Text("",large?11:10,.85);_title.FontWeight=Microsoft.UI.Text.FontWeights.SemiBold;foreach(var t in new[]{_title,_artist}){t.TextWrapping=TextWrapping.NoWrap;t.TextTrimming=TextTrimming.CharacterEllipsis;}_artist.Margin=new Thickness(8,0,0,0);_marquee=new(_title);_names.Children.Add(_marquee);_names.Children.Add(_artist);
+        Children.Add(_album);_spectrum.Margin=new Thickness(size+20,large?8:4,6,2);_spectrum.Opacity=.32;Children.Add(_spectrum);_row.ColumnDefinitions.Add(new(){Width=new GridLength(size)});_row.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});var art=new Border{Child=_cover,CornerRadius=new CornerRadius(large?9:7),Width=size,Height=size};Ui.ClipRounded(art,large?9:7);_row.Children.Add(art);Grid.SetColumn(_names,1);_row.Children.Add(_names);
+        _open=new(){Content=_row,Padding=new Thickness(large?4:8,0,8,0),Background=Ui.Brush(Colors.Transparent),BorderThickness=new Thickness(0),HorizontalContentAlignment=HorizontalAlignment.Stretch,VerticalContentAlignment=VerticalAlignment.Center,CornerRadius=new CornerRadius(17)};_open.Click+=(_,_)=>{var w=App.Instance.MusicWindow;if(w.IsOpen)w.HideSurface();else App.Instance.OpenMusic();};Children.Add(_open);
+        SizeChanged+=(_,_)=>UpdateRowWidth();Ui.ClipRounded(this,17);Refresh();
+    }
+    private void UpdateRowWidth(){if(ActualWidth>0)_row.Width=Math.Max(0,ActualWidth-_open.Padding.Left-_open.Padding.Right);}
+    internal void SetLite(bool lite){_lite=lite;_row.ColumnSpacing=lite?0:8;_row.ColumnDefinitions[1].Width=lite?new GridLength(0):new GridLength(1,GridUnitType.Star);_names.Visibility=lite?Visibility.Collapsed:Visibility.Visible;_open.Padding=new Thickness(lite?10:_large?4:8,0,lite?10:8,0);UpdateRowWidth();_marquee.SetEnabled(!lite);}
+    internal async void Refresh(){var a=App.Instance;var t=a.Track;_title.Text=t?.Title??"暂无音乐";_artist.Text=t?.Artist??"恢复示例音乐";_marquee.SetEnabled(!_lite);Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(_open,t==null?"暂无音乐":$"{t.Title} · {t.Artist}");_album.Refresh();_spectrum.Visibility=a.Prefs.Spectrum&&!_lite?Visibility.Visible:Visibility.Collapsed;if(_key==t?.Key)return;_key=t?.Key;_cover.Source=null;if(t?.Cover is {} bytes){using var stream=new InMemoryRandomAccessStream();using(var writer=new DataWriter(stream)){writer.WriteBytes(bytes);await writer.StoreAsync();writer.DetachStream();}stream.Seek(0);var bitmap=new BitmapImage();await bitmap.SetSourceAsync(stream);if(_key==t.Key)_cover.Source=bitmap;}}
+    internal void SetActive(bool active)=>_marquee.SetActive(active);
+    internal void UpdateSpectrum(){if(App.Instance.Prefs.Spectrum&&!_lite)_spectrum.Update(App.Instance.DemoLevels(),App.Instance.Track?.Playing==true,App.Instance.Prefs.Sensitivity,ActualTheme==ElementTheme.Dark?ColorHelper.FromArgb(255,240,221,236):App.Instance.Track?.Accent??Ui.Teal);}
+}
+internal sealed class CapsuleWindow:SurfaceWindow
+{
+    private readonly WeatherAtmosphere? _weatherLight;private readonly bool _music;private readonly MusicCapsuleContent? _musicContent;private readonly WeatherGlyph _glyph=new(size:26);private readonly TextBlock _temperature=Ui.Text("",15),_rainValue=Ui.Text("",11,.85);private readonly StackPanel _weatherRow=Ui.Row(4),_rainGroup=Ui.Row(2);private readonly Viewbox _weatherArt=new(){Width=24,Height=24};private readonly Border _surface=new(){CornerRadius=new CornerRadius(CapsuleGeometry.Radius),IsHitTestVisible=false};private bool _present,_lite,_pointer;internal bool Fading;internal bool IsLite=>_lite;internal bool WantsHover=>_pointer&&(!_music||App.Instance.Track!=null);private HoverPreviewWindow Preview=>_music?App.Instance.MusicHover:App.Instance.WeatherHover;
+    internal CapsuleWindow(bool music):base(music?"LumiBar · 音乐胶囊":"LumiBar · 天气胶囊",true){_music=music;_surface.Margin=new Thickness(CapsuleGeometry.Gutter,0,CapsuleGeometry.Gutter,0);_surface.Height=CapsuleGeometry.Height;_surface.VerticalAlignment=VerticalAlignment.Center;_surface.UseLayoutRounding=false;Root.Children.Insert(0,_surface);Root.Children.Add(new CapsuleEdge());Root.ActualThemeChanged+=(_,_)=>Surface();Surface();Body.PointerEntered+=(_,_)=>{_pointer=true;if(WantsHover)Preview.Request(this);};Body.PointerExited+=(_,_)=>{_pointer=false;Preview.LeaveOwner();};Body.PointerPressed+=(_,_)=>Preview.Cancel();if(music){_musicContent=new();SurfaceVisibilityChanged+=open=>_musicContent.SetActive(open);Body.Children.Add(_musicContent);}else{_weatherLight=new WeatherAtmosphere(LightHost,true);SurfaceVisibilityChanged+=open=>_weatherLight.SetActive(open);var row=_weatherRow;row.HorizontalAlignment=HorizontalAlignment.Center;row.VerticalAlignment=VerticalAlignment.Center;row.Height=28;_temperature.TextWrapping=_rainValue.TextWrapping=TextWrapping.NoWrap;_temperature.Height=20;_temperature.LineHeight=20;_temperature.LineStackingStrategy=LineStackingStrategy.BlockLineHeight;_rainValue.Height=16;_rainValue.LineHeight=16;_rainValue.LineStackingStrategy=LineStackingStrategy.BlockLineHeight;_weatherArt.Child=_glyph;row.Children.Add(_weatherArt);row.Children.Add(_temperature);_rainGroup.Margin=new Thickness(4,0,0,0);_rainGroup.Children.Add(new WeatherGlyph(61,true,14));_rainGroup.Children.Add(_rainValue);row.Children.Add(_rainGroup);_temperature.FontWeight=Microsoft.UI.Text.FontWeights.SemiBold;var button=new Button{Content=row,Padding=new Thickness(3,0,3,0),BorderThickness=new Thickness(0),Background=Ui.Brush(Colors.Transparent),CornerRadius=new CornerRadius(CapsuleGeometry.Radius),HorizontalContentAlignment=HorizontalAlignment.Center,VerticalContentAlignment=VerticalAlignment.Center,Height=34,MinHeight=0,HorizontalAlignment=HorizontalAlignment.Stretch};button.Click+=(_,_)=>{if(App.Instance.WeatherWindow.IsOpen)App.Instance.WeatherWindow.HideSurface();else App.Instance.OpenWeather();};Body.Children.Add(button);}Refresh();}
+    private void Surface()=>_surface.Background=Ui.Brush(Root.ActualTheme==ElementTheme.Light?ColorHelper.FromArgb(55,240,246,255):ColorHelper.FromArgb(30,188,199,224));
+    internal void Refresh(){if(_music)_musicContent!.Refresh();else{_weatherLight?.Update(App.Instance.Forecast?.Code??0,App.Instance.Forecast?.IsDay,App.Instance.Prefs.Animations);_glyph.Update(App.Instance.Forecast?.Code??0,App.Instance.Forecast?.IsDay);_temperature.Text=App.Instance.Forecast==null?"—":App.Instance.Temperature(App.Instance.Forecast.Temperature);_rainValue.Text=$"{App.Instance.Forecast?.Rain??0:0}%";}}
+    internal void SetLite(bool lite){var changed=_lite!=lite;_lite=lite;if(!_music){_rainGroup.Visibility=lite?Visibility.Collapsed:Visibility.Visible;_weatherArt.Width=_weatherArt.Height=lite?22:24;_weatherRow.Spacing=lite?3:4;}_musicContent?.SetLite(lite);if(changed&&App.Instance.MusicHover!=null)Preview.OwnerModeChanged(this);}
+    internal void SetExtent(double width){var scale=Native.ReadTaskbar()?.Scale??1;Root.UseLayoutRounding=false;Root.Width=Math.Round((width+CapsuleGeometry.Gutter*2)*scale)/scale;Root.Height=Math.Round(CapsuleGeometry.OuterHeight*scale)/scale;Native.RefreshChrome(this);Native.RoundCapsule(this,(int)(width*scale),(int)(34*scale));}
+    internal double PreferredWeatherWidth()
+    {
+        if(_music)return App.Instance.Prefs.MusicWidth;
+        _weatherRow.InvalidateMeasure();_weatherRow.Measure(new Windows.Foundation.Size(double.PositiveInfinity,CapsuleGeometry.Height));
+        // Measure the actual inherited font and current signed values. Six DIP
+        // on each side keeps the icon clear of the curved ends at its full height.
+        return Math.Max(_lite?64:104,Math.Ceiling(_weatherRow.DesiredSize.Width+12));
+    }
+    internal void ApplyGlow(){if(_music)_musicContent?.Refresh();else Refresh();}
+    internal void UpdateSpectrum(){if(IsOpen)_musicContent?.UpdateSpectrum();}
+    internal async void SetPresent(bool visible){_musicContent?.SetActive(visible);if(_present==visible)return;_present=visible;Fading=!visible;Ui.Fade(Root,visible?1:0,App.Instance.Prefs.Animations);if(!visible){await Task.Delay(320);if(!_present)HideSurface();Fading=false;}}
+}

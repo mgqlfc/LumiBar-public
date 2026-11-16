@@ -1,0 +1,196 @@
+{
+  "_fixture": {
+    "demo": true,
+    "label": "示例数据",
+    "song": "虚构曲目，用于 UI 设计"
+  },
+  "protocolVersion": 1,
+  "capturedAt": "2026-11-14T09:00:00Z",
+  "appearance": {
+    "preference": "System",
+    "accentColor": "blue",
+    "accentPalette": {"id":"blue","name":"冰糖蓝","colors":["#6CE7DA","#21BEC2","#118FB1"],"first":7137242,"middle":2211522,"last":1150897,"lightInk":27776,"darkInk":7399642},
+    "popupTheme": "Light",
+    "taskbarTheme": "Light",
+    "coverGlow": true,
+    "glow": 0.28,
+    "glassOpacity": 0.62,
+    "animations": true
+  },
+  "weather": {
+    "city": {
+      "name": "奎文区",
+      "latitude": 36.7066306,
+      "longitude": 119.1268375,
+      "region": "山东省 · 潍坊市",
+      "timeZone": "Asia/Shanghai"
+    },
+    "status": "示例数据 · 更新于 17:00",
+    "forecast": {
+      "temperature": 12,
+      "feelsLike": 11,
+      "code": 0,
+      "humidity": 52,
+      "wind": 12,
+      "windDirection": 120,
+      "rain": 10,
+      "hours": [
+        {
+          "time": "2026-11-14T17:00:00",
+          "temperature": 12,
+          "code": 0,
+          "rain": 10
+        },
+        {
+          "time": "2026-11-14T18:00:00",
+          "temperature": 11,
+          "code": 1,
+          "rain": 10
+        },
+        {
+          "time": "2026-11-14T19:00:00",
+          "temperature": 10,
+          "code": 2,
+          "rain": 20
+        },
+        {
+          "time": "2026-11-14T20:00:00",
+          "temperature": 9,
+          "code": 3,
+          "rain": 20
+        }
+      ],
+      "days": [
+        {
+          "date": "2026-11-14T00:00:00",
+          "min": 6,
+          "max": 14,
+          "code": 0,
+          "rain": 10
+        },
+        {
+          "date": "2026-11-15T00:00:00",
+          "min": 7,
+          "max": 15,
+          "code": 2,
+          "rain": 20
+        },
+        {
+          "date": "2026-11-16T00:00:00",
+          "min": 8,
+          "max": 14,
+          "code": 3,
+          "rain": 30
+        }
+      ],
+      "updated": "2026-11-14T17:00:00+08:00",
+      "aqi": 83,
+      "pm25": 25,
+      "pm10": 41,
+      "airError": null,
+      "source": "Mock · 示例数据",
+      "estimatedFeelsLike": false,
+      "timeZoneLabel": "城市当地时间"
+    },
+    "precipitationNextHour": {
+      "windowStart": "2026-11-14T17:00:00+08:00",
+      "windowEnd": "2026-11-14T18:00:00+08:00",
+      "source": "Mock · 示例数据",
+      "kind": "model-trend",
+      "intervalMinutes": 15,
+      "precisionNote": "15 分钟模式趋势 · 示例数据",
+      "complete": true,
+      "intervals": [
+        {
+          "start": "2026-11-14T17:00:00+08:00",
+          "end": "2026-11-14T17:15:00+08:00",
+          "amountMm": 0.1
+        },
+        {
+          "start": "2026-11-14T17:15:00+08:00",
+          "end": "2026-11-14T17:30:00+08:00",
+          "amountMm": 0.3
+        },
+        {
+          "start": "2026-11-14T17:30:00+08:00",
+          "end": "2026-11-14T17:45:00+08:00",
+          "amountMm": 0.2
+        },
+        {
+          "start": "2026-11-14T17:45:00+08:00",
+          "end": "2026-11-14T18:00:00+08:00",
+          "amountMm": 0.0
+        }
+      ]
+    }
+  },
+  "media": {
+    "key": "mock-lumilight",
+    "title": "微光",
+    "artist": "Lumi Studio",
+    "album": "窗边的光",
+    "source": "Mock Player",
+    "playing": true,
+    "position": 84,
+    "duration": 222,
+    "hasArtwork": false,
+    "accent": "#CB8FB9",
+    "controls": {
+      "toggle": true,
+      "previous": true,
+      "next": true,
+      "seek": true
+    }
+  },
+  "lyrics": {
+    "trackKey": "mock-lumilight",
+    "status": "原创示例歌词",
+    "offsetSeconds": 0,
+    "lines": [
+      {
+        "seconds": 70,
+        "text": "把光留在窗边"
+      },
+      {
+        "seconds": 80,
+        "text": "让旋律慢慢靠近"
+      },
+      {
+        "seconds": 90,
+        "text": "此刻只听见你"
+      }
+    ]
+  },
+  "settings": {
+    "city": {
+      "name": "奎文区",
+      "latitude": 36.7066306,
+      "longitude": 119.1268375,
+      "region": "山东省 · 潍坊市",
+      "timeZone": "Asia/Shanghai"
+    },
+    "favorites": [],
+    "theme": "System",
+    "accentColor": "blue",
+    "glow": 0.28,
+    "glassOpacity": 0.62,
+    "coverGlow": true,
+    "animations": true,
+    "showWeather": true,
+    "showMusic": true,
+    "spectrum": true,
+    "hideInFullscreen": true,
+    "autoLyrics": true,
+    "autoStart": false,
+    "closeToTray": true,
+    "weatherRefreshMinutes": 20,
+    "fahrenheit": false,
+    "windMetersPerSecond": false,
+    "gap": 8,
+    "musicWidth": 238,
+    "lyricsFontSize": 25,
+    "lyricsOffset": 0,
+    "sensitivity": 1,
+    "enabledPlugins": []
+  }
+}

@@ -1,0 +1,94 @@
+<UserControl
+    x:Class="AntigravityFrontend.Controls.WeatherCapsuleControl"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:AntigravityFrontend.Controls">
+
+    <Grid>
+        <!-- Minimalist airy hover summary bubble -->
+        <Popup x:Name="PrecipBubblePopup" IsLightDismissEnabled="False" ShouldConstrainToRootBounds="False" VerticalOffset="-128" HorizontalOffset="-84">
+            <Border x:Name="BubbleBorder" MinWidth="248" MaxWidth="292" CornerRadius="14" Padding="18,14" BorderThickness="1"
+                    SizeChanged="OnBubbleSizeChanged">
+                <ContentControl x:Name="BubbleFontHost" HorizontalContentAlignment="Stretch" IsTabStop="False">
+                    <StackPanel Spacing="10">
+                        <!-- Row 1: Location + Feels Like -->
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                <FontIcon Glyph="&#xE707;" FontSize="12" Opacity="0.72" />
+                                <TextBlock x:Name="BubbleLocationText" Text="奎文区" FontSize="13" FontWeight="SemiBold"
+                                           TextTrimming="CharacterEllipsis" MaxLines="1" />
+                            </StackPanel>
+                            <TextBlock x:Name="BubbleFeelsText" Grid.Column="1" Text="体感 11°" FontSize="12"
+                                       Opacity="0.80" VerticalAlignment="Center" />
+                        </Grid>
+
+                        <!-- Row 2: Wind + Humidity -->
+                        <Grid ColumnSpacing="14">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                <FontIcon Glyph="&#xEC49;" FontSize="12" Opacity="0.68" />
+                                <TextBlock x:Name="BubbleWindText" Text="东南风 12 km/h" FontSize="12" Opacity="0.86"
+                                           TextTrimming="CharacterEllipsis" MaxLines="1" />
+                            </StackPanel>
+                            <TextBlock x:Name="BubbleHumidityText" Grid.Column="1" Text="湿度 52%" FontSize="12"
+                                       Opacity="0.78" VerticalAlignment="Center" />
+                        </Grid>
+
+                        <Border x:Name="BubbleDivider" Height="1" Opacity="0.14" Background="White" />
+
+                        <!-- Row 3: 1-Hour Precipitation Summary (no 4-slot breakdown) -->
+                        <Grid ColumnSpacing="10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Orientation="Horizontal" Spacing="7" VerticalAlignment="Center">
+                                <Ellipse x:Name="BubblePrecipDot" Width="7" Height="7" Fill="#38BDF8" VerticalAlignment="Center" />
+                                <TextBlock x:Name="BubblePrecipSummaryText" Text="未来 1h 无明显降水" FontSize="12"
+                                           Opacity="0.88" TextTrimming="CharacterEllipsis" MaxLines="1" />
+                            </StackPanel>
+                            <Border x:Name="BubblePrecipBadge" Grid.Column="1" CornerRadius="5" Padding="6,2"
+                                    VerticalAlignment="Center" Background="#2038BDF8" Visibility="Collapsed">
+                                <TextBlock x:Name="BubblePrecipBadgeText" Text="示例" FontSize="10" Foreground="#38BDF8" />
+                            </Border>
+                        </Grid>
+                    </StackPanel>
+                </ContentControl>
+            </Border>
+        </Popup>
+
+        <Border x:Name="OuterShell"
+                Height="40"
+                Width="104"
+                CornerRadius="20"
+                BorderThickness="1"
+                PointerEntered="OnPointerEntered"
+                PointerExited="OnPointerExited"
+                PointerMoved="OnPointerMoved"
+                Tapped="OnCapsuleTapped">
+            <Grid x:Name="CapsuleInnerHost" SizeChanged="OnCapsuleHostSizeChanged">
+                <Border x:Name="WeatherTintLayer" CornerRadius="20" IsHitTestVisible="False" />
+                <Canvas x:Name="WeatherAmbientCanvas" IsHitTestVisible="False" />
+                <Border x:Name="RevealOverlay" CornerRadius="20" Opacity="0" IsHitTestVisible="False" />
+
+                <StackPanel Orientation="Horizontal"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Spacing="6"
+                            Padding="10,0">
+                    <TextBlock x:Name="WeatherIconText" Text="☀️" FontSize="15" VerticalAlignment="Center" />
+                    <Grid x:Name="WeatherMistIconHost" Width="16" Height="16" VerticalAlignment="Center" Visibility="Collapsed" IsHitTestVisible="False" />
+                    <TextBlock x:Name="TempText" Text="12°" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" />
+                    <TextBlock x:Name="DescText" Text="晴" FontSize="12" Opacity="0.76" VerticalAlignment="Center" />
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

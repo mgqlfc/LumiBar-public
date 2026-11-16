@@ -1,0 +1,4 @@
+LIBRARY LumiBar.TaskbarBridge.v5.dll
+EXPORTS
+    DllGetClassObject PRIVATE
+    DllCanUnloadNow PRIVATE

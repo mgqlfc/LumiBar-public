@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "id": "antigravity.lumibar-glass",
+  "name": "Antigravity Fluent Glass UI",
+  "version": "0.7.0",
+  "kind": "external-frontend",
+  "protocolVersion": 1,
+  "entry": "dist/AntigravityFrontend.exe",
+  "mode": "taskbar",
+  "owns": [
+    "taskbar-capsules",
+    "capsule-visuals",
+    "weather-popup",
+    "music-popup",
+    "settings",
+    "window-interactions"
+  ],
+  "note": "WinUI 3 Fluent glass frontend supporting LumiBar 0.7 external taskbar renderer lease takeover, live preview workbench, and independent acrylic flyouts via Windows Named Pipe."
+}

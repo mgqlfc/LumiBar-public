@@ -1,0 +1,170 @@
+<Window
+    x:Class="AntigravityFrontend.Windows.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:AntigravityFrontend.Controls"
+    Title="LumiBar · Antigravity 玻璃前端预览工作台">
+
+    <ContentControl x:Name="FontHost" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" IsTabStop="False">
+    <Grid x:Name="RootGrid" Padding="20,16,20,18" RowSpacing="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- Header: Connection Status & Quick Launch -->
+        <Border Grid.Row="0" CornerRadius="14" Padding="16,12" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+            <Grid ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Spacing="4">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBlock Text="Antigravity Fluent 玻璃胶囊插件" FontSize="17" FontWeight="SemiBold" />
+                        <Border x:Name="ConnBadge" CornerRadius="6" Padding="8,2" Background="#2638BDF8">
+                            <TextBlock x:Name="ConnStatusText" Text="初始化中..." FontSize="12" Foreground="#38BDF8" />
+                        </Border>
+                    </StackPanel>
+                    <TextBlock x:Name="ConnDetailText" Text="音乐在左 · 天气在右 · 点击下方任务栏预览胶囊可弹出真实桌面 WinUI 3 亚克力浮窗"
+                               FontSize="12" Opacity="0.72" TextWrapping="Wrap" />
+                </StackPanel>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <ToggleSwitch x:Name="ModeToggleSwitch" OnContent="示例数据" OffContent="真实后端"
+                                  Toggled="OnDataModeToggled" MinWidth="120" />
+                    <Button Content="歌词浮窗" Click="OnOpenLyricsClick" />
+                    <Button Content="天气浮窗" Click="OnOpenWeatherClick" />
+                    <Button Content="设置" Style="{ThemeResource AccentButtonStyle}" Click="OnOpenSettingsClick" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Center Workbench: Space Pressure & Hysteresis + Mock Lifecycle Demo -->
+        <ScrollViewer Grid.Row="1">
+            <StackPanel Spacing="14">
+                <Border x:Name="TaskbarTakeoverCard" CornerRadius="14" Padding="16,12" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Spacing="4">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBlock Text="Windows 任务栏原生接管（0.7 External Renderer Lease）" FontSize="14" FontWeight="SemiBold" />
+                                <Border x:Name="TakeoverPhaseBadge" CornerRadius="6" Padding="8,2" Background="#2494A3B8">
+                                    <TextBlock x:Name="TakeoverPhaseText" Text="WaitingBackend" FontSize="11" Foreground="#94A3B8" />
+                                </Border>
+                            </StackPanel>
+                            <TextBlock x:Name="TakeoverDetailText" Text="等待连接实况 LumiBar 后端以注册隐藏任务栏胶囊窗口..." FontSize="12" Opacity="0.76" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <Button Content="连接正式版 LumiBar" Click="OnSwitchToOfficialClick" />
+                            <Button Content="重新接管" Style="{ThemeResource AccentButtonStyle}" Click="OnRetryTakeoverClick" />
+                            <Button Content="释放回内置" Click="OnReleaseTakeoverClick" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <Border CornerRadius="14" Padding="16" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+                    <StackPanel Spacing="10">
+                        <Grid>
+                            <StackPanel Spacing="2">
+                                <TextBlock Text="任务栏空间预留与双 Lite 避让演示" FontSize="14" FontWeight="SemiBold" />
+                                <TextBlock x:Name="LayoutTelemetryText"
+                                           Text="可用宽度：520 DIP ｜ 状态：标准双胶囊（进入 Lite ≤ 370 / 恢复展开 ≥ 415 滞回缓冲）"
+                                           FontSize="12" Opacity="0.76" />
+                            </StackPanel>
+                        </Grid>
+
+                        <Slider x:Name="SpaceSlider"
+                                ValueChanged="OnSpaceSliderChanged" />
+
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button Content="宽松标准态 (520)" Click="OnPresetFullClick" />
+                            <Button Content="进入滞回缓冲区 (390)" Click="OnPresetBufferClick" />
+                            <Button Content="拥挤触发双 Lite (280)" Click="OnPresetLiteClick" />
+                            <Button Content="空间恢复展开 (440)" Click="OnPresetRecoverClick" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <Border x:Name="MockLifecycleCard" CornerRadius="14" Padding="16" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="媒体会话生命周期与悬停交互验证（示例数据模式下可用）" FontSize="14" FontWeight="SemiBold" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button Content="播放中（实时频谱）" Click="OnMockPlayClick" />
+                            <Button Content="暂停（胶囊保留、频谱回落）" Click="OnMockPauseClick" />
+                            <Button Content="关闭媒体会话（音乐胶囊淡出）" Click="OnMockStopMediaClick" />
+                        </StackPanel>
+                        <TextBlock Text="交互提示：鼠标悬停音乐胶囊内部渐变出现上一首/暂停/下一首（外部宽度不变，不推动天气）；悬停天气胶囊浮出 1h 降水气泡；点击胶囊弹出对应桌面亚克力浮窗。"
+                                   FontSize="12" Opacity="0.72" TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Bottom Stage: Simulated Windows 11 Taskbar (Music Left, Weather Right Near Tray) -->
+        <Border x:Name="TaskbarSurface" Grid.Row="2" Height="56" CornerRadius="14" Padding="12,0" BorderThickness="1">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <!-- Simulated Windows Program Icons (shrink / move into overflow '...' when crowded) -->
+                <StackPanel x:Name="AppIconsPanel" Grid.Column="0" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                    <Border Width="34" Height="34" CornerRadius="8" Background="#16FFFFFF" ToolTipService.ToolTip="开始">
+                        <TextBlock Text="⊞" FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#60CDFF" />
+                    </Border>
+                    <Border Width="34" Height="34" CornerRadius="8" Background="#12FFFFFF" ToolTipService.ToolTip="搜索">
+                        <FontIcon Glyph="&#xE721;" FontSize="14" />
+                    </Border>
+                    <Border x:Name="AppIconExplorer" Width="34" Height="34" CornerRadius="8" Background="#12FFFFFF" ToolTipService.ToolTip="资源管理器">
+                        <TextBlock Text="📁" FontSize="15" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <Border x:Name="AppIconEdge" Width="34" Height="34" CornerRadius="8" Background="#12FFFFFF" ToolTipService.ToolTip="Edge">
+                        <TextBlock Text="🌐" FontSize="15" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <Border x:Name="AppIconCode" Width="34" Height="34" CornerRadius="8" Background="#12FFFFFF" ToolTipService.ToolTip="IDE">
+                        <TextBlock Text="💻" FontSize="15" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <Border x:Name="AppIconPlayer" Width="34" Height="34" CornerRadius="8" Background="#12FFFFFF" ToolTipService.ToolTip="播放器">
+                        <TextBlock Text="🎧" FontSize="15" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <!-- Overflow indicator when apps yield space for Dual Lite -->
+                    <Border x:Name="OverflowPill" Width="32" Height="32" CornerRadius="8" Background="#2460CDFF"
+                            Visibility="Collapsed" ToolTipService.ToolTip="部分程序图标已收进溢出区域，为双 Lite 胶囊让位">
+                        <TextBlock Text="···" FontSize="14" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                </StackPanel>
+
+                <!-- Blank Zone Space -->
+                <Border Grid.Column="1" />
+
+                <!-- Dual Capsules Anchor: Music Left, Weather Right (closest to System Tray) -->
+                <StackPanel x:Name="CapsulesAnchorPanel" Grid.Column="2" Orientation="Horizontal" Spacing="8"
+                            VerticalAlignment="Center" Margin="0,0,10,0">
+                    <controls:MusicCapsuleControl x:Name="TaskbarMusicCapsule" />
+                    <controls:WeatherCapsuleControl x:Name="TaskbarWeatherCapsule" />
+                </StackPanel>
+
+                <!-- Simulated Windows System Tray -->
+                <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" Padding="6,0,2,0">
+                    <FontIcon Glyph="&#xE70E;" FontSize="11" Opacity="0.78" />
+                    <FontIcon Glyph="&#xE701;" FontSize="13" Opacity="0.88" />
+                    <FontIcon Glyph="&#xE767;" FontSize="13" Opacity="0.88" />
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock x:Name="TrayTimeText" Text="17:40" FontSize="12" HorizontalAlignment="Right" />
+                        <TextBlock x:Name="TrayDateText" Text="2026/11/14" FontSize="12" Opacity="0.72" HorizontalAlignment="Right" />
+                    </StackPanel>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+    </ContentControl>
+</Window>

@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "id": "antigravity.glass-preview",
+  "name": "Antigravity 玻璃 UI",
+  "version": "0.1.0",
+  "kind": "external-frontend",
+  "protocolVersion": 1,
+  "entry": "dist/AntigravityFrontend.exe",
+  "mode": "preview",
+  "owns": ["capsule-visuals", "weather-popup", "music-popup", "settings", "window-interactions"],
+  "note": "开发交付清单；本版后端尚不扫描或自动启动 external-frontend。由开发者手动启动。"
+}

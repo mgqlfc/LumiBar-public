@@ -1,0 +1,28 @@
+[Unit]
+Description=LumiBar QWeather proxy
+After=network-online.target
+Wants=network-online.target
+[Service]
+Type=simple
+DynamicUser=yes
+StateDirectory=lumibar-weather
+WorkingDirectory=/opt/lumibar-weather
+ExecStart=/opt/yanqi/node/bin/node /opt/lumibar-weather/server.mjs
+EnvironmentFile=/etc/lumibar-weather.env
+Restart=on-failure
+RestartSec=3
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+MemoryMax=128M
+CPUQuota=25%
+TasksMax=48
+[Install]
+WantedBy=multi-user.target

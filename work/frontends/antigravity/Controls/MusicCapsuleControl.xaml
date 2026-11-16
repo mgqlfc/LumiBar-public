@@ -1,0 +1,147 @@
+<UserControl
+    x:Class="AntigravityFrontend.Controls.MusicCapsuleControl"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:AntigravityFrontend.Controls">
+
+    <Grid>
+        <!-- Hover mini song/artist bubble shown in Lite mode -->
+        <Popup x:Name="LiteHoverPopup" IsLightDismissEnabled="False" ShouldConstrainToRootBounds="False" VerticalOffset="-66" HorizontalOffset="-72">
+            <Border x:Name="LiteHoverBorder" MinWidth="188" MaxWidth="250" CornerRadius="14" Padding="10,8" BorderThickness="1">
+                <ContentControl x:Name="LiteHoverFontHost" HorizontalContentAlignment="Stretch" IsTabStop="False">
+                <Grid ColumnSpacing="9">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <Border x:Name="LiteHoverArtFrame" Width="30" Height="30" CornerRadius="8" BorderThickness="1">
+                        <Grid>
+                            <TextBlock x:Name="LiteHoverArtFallback" Text="🎵" FontSize="14"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            <Image x:Name="LiteHoverArtImage" Stretch="UniformToFill" Visibility="Collapsed" />
+                        </Grid>
+                    </Border>
+
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                        <TextBlock x:Name="LiteHoverTitleText" Text="微光" FontSize="12" FontWeight="SemiBold"
+                                   TextTrimming="CharacterEllipsis" MaxLines="1" />
+                        <TextBlock x:Name="LiteHoverArtistText" Text="Lumi Studio" FontSize="11" Opacity="0.78"
+                                   TextTrimming="CharacterEllipsis" MaxLines="1" />
+                    </StackPanel>
+
+                    <Border x:Name="LiteHoverStatusBadge" Grid.Column="2" CornerRadius="6" Padding="7,2"
+                            VerticalAlignment="Center" Background="#24FF2A85">
+                        <TextBlock x:Name="LiteHoverStatusText" Text="PLAYING" FontSize="10" Foreground="#00F5D4" />
+                    </Border>
+                </Grid>
+                </ContentControl>
+            </Border>
+        </Popup>
+
+        <Border x:Name="OuterShell"
+                Height="40"
+                Width="274"
+                CornerRadius="20"
+                BorderThickness="1"
+                PointerEntered="OnPointerEntered"
+                PointerExited="OnPointerExited"
+                PointerMoved="OnPointerMoved"
+                Tapped="OnCapsuleTapped">
+            <Grid>
+                <!-- Readable Dark Obsidian Veil across text lane (Standard mode only) -->
+                <Border x:Name="CenterTextVeil" CornerRadius="12" Margin="36,5,110,5" IsHitTestVisible="False" />
+
+                <!-- Pointer Reveal Highlight -->
+                <Border x:Name="RevealOverlay" CornerRadius="20" Opacity="0" IsHitTestVisible="False" />
+
+                <!-- Standard Mode: Exact 1:1 3-Slot Layout (Cover 26x26 | Title/Artist | 68x24 VFD / Hover B1 Keys) -->
+                <Grid x:Name="StandardLayout" Padding="7,2,7,2">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Slot 1: Album Cover Art -->
+                    <Border x:Name="ArtFrame" Width="26" Height="26" CornerRadius="13" BorderThickness="1" VerticalAlignment="Center">
+                        <Grid>
+                            <TextBlock x:Name="ArtFallbackGlyph" Text="💿" FontSize="13"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            <Image x:Name="ArtImage" Stretch="UniformToFill" Visibility="Collapsed" />
+                        </Grid>
+                    </Border>
+
+                    <!-- Slot 2: Readable Title + Artist -->
+                    <StackPanel x:Name="TextInfoPanel" Grid.Column="1" Margin="7,0,7,0" VerticalAlignment="Center" Spacing="1">
+                        <TextBlock x:Name="TitleText"
+                                   Text="Midnight Echo"
+                                   FontSize="11.5"
+                                   LineHeight="13"
+                                   LineStackingStrategy="BlockLineHeight"
+                                   FontWeight="SemiBold"
+                                   CharacterSpacing="20"
+                                   TextTrimming="CharacterEllipsis"
+                                   MaxLines="1" />
+                        <TextBlock x:Name="ArtistText"
+                                   Text="Lumi Synth"
+                                   FontSize="10"
+                                   LineHeight="12"
+                                   LineStackingStrategy="BlockLineHeight"
+                                   CharacterSpacing="18"
+                                   TextTrimming="CharacterEllipsis"
+                                   MaxLines="1" />
+                    </StackPanel>
+
+                    <!-- Slot 3: Right 68x24 Crisp VFD Spectrum OR B1 Hardware Button Tray -->
+                    <Grid x:Name="RightSlotHost" Grid.Column="2" Width="68" Height="24" VerticalAlignment="Center">
+                        <controls:SpectrumBackdropControl x:Name="SpectrumBackdrop"
+                                                          VerticalAlignment="Stretch"
+                                                          HorizontalAlignment="Stretch" />
+
+                        <Border x:Name="HoverControlsPanel"
+                                Opacity="0"
+                                IsHitTestVisible="False"
+                                CornerRadius="12"
+                                Padding="4,2"
+                                BorderThickness="1"
+                                Background="#05070E"
+                                BorderBrush="#F20F172A">
+                            <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <Button x:Name="PrevBtn" Width="18" Height="18" Padding="0" CornerRadius="4" BorderThickness="1"
+                                        Click="OnPrevClick" ToolTipService.ToolTip="上一首">
+                                    <FontIcon Glyph="&#xE892;" FontSize="9" />
+                                </Button>
+                                <Grid>
+                                    <Button x:Name="PlayPauseBtn" Width="20" Height="18" Padding="0" CornerRadius="4" BorderThickness="1"
+                                            Click="OnToggleClick" ToolTipService.ToolTip="播放 / 暂停">
+                                        <FontIcon x:Name="PlayPauseGlyph" Glyph="&#xE769;" FontSize="9" />
+                                    </Button>
+                                    <Border Width="6" Height="1.5" CornerRadius="1" Background="#FF7A00"
+                                            HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,2,0,0" IsHitTestVisible="False" />
+                                </Grid>
+                                <Button x:Name="NextBtn" Width="18" Height="18" Padding="0" CornerRadius="4" BorderThickness="1"
+                                        Click="OnNextClick" ToolTipService.ToolTip="下一首">
+                                    <FontIcon Glyph="&#xE893;" FontSize="9" />
+                                </Button>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                </Grid>
+
+                <!-- Lite Mode: Spectrum ONLY (NO cover, NO text, NO pause icon) inside G3 Album-Neon Rim -->
+                <Grid x:Name="LiteLayout" Visibility="Collapsed" Padding="11,8">
+                    <controls:SpectrumBackdropControl x:Name="LiteSpectrumBackdrop"
+                                                      VerticalAlignment="Stretch"
+                                                      HorizontalAlignment="Stretch" />
+                </Grid>
+
+                <!-- G3 Overlay Above Spectrum: Album-Sampled Neon Inner Perimeter Aura + CRT Scanliner -->
+                <Border x:Name="AmbientTintLayer" CornerRadius="20" BorderThickness="5" IsHitTestVisible="False" />
+                <Border x:Name="InnerNeonRim" CornerRadius="19" Margin="1.5" BorderThickness="2" IsHitTestVisible="False" />
+                <Canvas x:Name="InnerCrtScanCanvas" IsHitTestVisible="False" SizeChanged="OnInnerCrtSizeChanged" />
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>
