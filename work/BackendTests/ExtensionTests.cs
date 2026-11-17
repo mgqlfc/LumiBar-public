@@ -41,6 +41,22 @@ internal static class ExtensionTests
         Check(!recovered.Capsules.Lite&&!recovered.Elevated,"Recovered measured blank space requests larger reservation without lifting the capsule windows");
         var offline=reservationPolicy.Calculate(nativeBar,1650,1700,null,1,104,238,8,false);
         Check(offline.Elevated&&offline.Capsules.MusicWidth>0&&offline.Capsules.WeatherWidth>0,"Unavailable bridge retains both capsules without drawing over taskbar apps");
+        var startPolicy=new ReservationLayoutPolicy();
+        var startBaseline=startPolicy.Calculate(nativeBar,500,1700,null,1,104,238,8,false,explorerPid:42);
+        var startOpen=startPolicy.Calculate(nativeBar,1900,1900,null,1,104,238,8,false,geometryVerified:false,shellTransition:true,explorerPid:42);
+        Check(!startOpen.Elevated&&!startOpen.Capsules.Lite&&startOpen.Right==startBaseline.Right,"Start menu UIA loss preserves both edges and full mode while the bridge is unavailable");
+        var startRecovered=startPolicy.Calculate(nativeBar,500,1700,null,1,104,238,8,false,explorerPid:42);
+        Check(!startRecovered.Elevated&&startRecovered.Right==startOpen.Right,"Start menu closure returns to fresh geometry without moving capsules");
+        var trayGrowth=startPolicy.Calculate(nativeBar,650,650,null,1,104,238,8,false,geometryVerified:false,shellTransition:true,explorerPid:42);
+        Check(trayGrowth.Capsules.Lite&&trayGrowth.Right==650,"Real tray growth still reduces capacity during a shell transition");
+        var replaced=startPolicy.Calculate(nativeBar,1900,1900,null,1,104,238,8,false,geometryVerified:false,shellTransition:true,explorerPid:43);
+        Check(replaced.Elevated,"Explorer restart never reuses another process's measured blank space");
+        var resized=startPolicy.Calculate(nativeBar with{Right=2400},1900,1900,null,1,104,238,8,false,geometryVerified:false,shellTransition:true,explorerPid:42);
+        Check(resized.Elevated,"Taskbar geometry change invalidates retained shell-transition measurements");
+        var unknown=new ReservationLayoutPolicy().Calculate(nativeBar,1700,1700,null,1,104,238,8,false,geometryVerified:false,shellTransition:true,explorerPid:42);
+        Check(unknown.Elevated,"A shell overlay without a previous measurement does not invent free space");
+        var endGrace=startPolicy.Calculate(nativeBar,1900,1900,null,1,104,238,8,false,geometryVerified:false,shellTransition:false,explorerPid:42);
+        Check(endGrace.Elevated,"Persistent measurement loss outside shell transitions still requires a safe fallback");
         return results;
     }
 }

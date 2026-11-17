@@ -2,7 +2,7 @@
 
 Ma Guanqun with Codex
 
-Windows 11 任务栏天气与音乐双胶囊。当前版本 0.7.52，使用 C# / .NET 8 / WinUI 3；原生 C++ 组件处理任务栏空间预留。自带天气详情、系统媒体控制、频谱、同步歌词和可替换前端接口。Mac 版目标 macOS 27：音乐围绕刘海展开，天气放在右侧菜单栏，详见 [Mac 移植交接](MACOS_HANDOFF.md)。
+Windows 11 任务栏天气与音乐双胶囊。当前版本 0.7.54，使用 C# / .NET 8 / WinUI 3；原生 C++ 组件处理任务栏空间预留。自带天气详情、系统媒体控制、频谱、同步歌词和可替换前端接口。Mac 版目标 macOS 27：音乐围绕刘海展开，天气放在右侧菜单栏，详见 [Mac 移植交接](MACOS_HANDOFF.md)。
 
 ## 目录
 
@@ -36,7 +36,7 @@ dotnet build .\work\LumiBar\LumiBar.csproj -c Release -p:Platform=x64
 dotnet run --project work/BackendTests/BackendTests.csproj -c Release
 ```
 
-0.7.49 后端已在开发机通过 341 项检查，0.7.50–0.7.52 完成胶囊布局微调。macOS 原生客户端处于概念与移植准备阶段，Windows 10 任务栏适配待完成。
+0.7.54 后端已在开发机通过 348 项检查，修复开始菜单期间的误降级与位置跳变，预警徽章只显示事件名称。macOS 原生客户端处于概念与移植准备阶段，Windows 10 任务栏适配待完成。
 
 Antigravity 前端新增 Win2D 1.3.2、锁文件与离线构建脚本。最新配置版本为 v7，歌词浮窗默认 512×384；历史 0.7.49 文档记录的是 v6 的 420×384，当前默认值以 `Sdk/PluginConfig.cs` 和 `antigravity-plugin.defaults.json` 为准。
 
@@ -47,7 +47,7 @@ GitHub 页面打开 **Actions → Build Release → Run workflow**，分支选 `
 本机入口 `work/installer/build-release.ps1` 发布自包含程序并调用 Inno Setup。编译器从 `-IsccPath`、`LUMIBAR_ISCC`、本机工具目录或已安装的 Inno Setup 查找。
 
 ```powershell
-& .\work\installer\build-release.ps1 -Version '0.7.52'
+& .\work\installer\build-release.ps1 -Version '0.7.54'
 ```
 
 已存在同名发布目录时脚本会停止，使用新版本或新的发布目录构建。安装包和中间产物保留在本机，不纳入 Git。

@@ -8,7 +8,7 @@ internal static class WeatherAlerts
 {
     internal static int Rank(string level)=>level switch{"red"=>4,"orange"=>3,"yellow"=>2,"blue"=>1,_=>0};
     internal static string LevelName(string level)=>level switch{"red"=>"红色","orange"=>"橙色","yellow"=>"黄色","blue"=>"蓝色",_=>"预警"};
-    internal static string Label(WeatherAlert alert)=>alert.Event+LevelName(alert.Level);
+    internal static string Label(WeatherAlert alert)=>alert.Event;
     internal static IReadOnlyList<WeatherAlert> Current(IEnumerable<WeatherAlert>? alerts,DateTimeOffset now)=>(alerts??[])
         .Where(a=>a!=null&&!string.IsNullOrWhiteSpace(a.Id)&&!string.IsNullOrWhiteSpace(a.Event))
         .GroupBy(a=>a.Id,StringComparer.Ordinal).Select(g=>g.OrderByDescending(a=>a.IssuedAt).First())

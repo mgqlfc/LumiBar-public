@@ -1,6 +1,6 @@
 # LumiBar Mac 移植交接
 
-2026-11-17。目标系统：macOS 27。Windows 当前实机版本：0.7.52。制作人：Ma Guanqun with Codex。
+2026-11-17。目标系统：macOS 27。Windows 当前实机版本：0.7.54。制作人：Ma Guanqun with Codex。
 
 ## 已选定的方向
 

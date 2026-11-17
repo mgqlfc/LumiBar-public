@@ -38,7 +38,7 @@ var advisory=new WeatherAlert("rain","暴雨","orange","暴雨橙色预警","区
 var blueAlert=advisory with{Id="wind",Event="大风",Level="blue"};var redAlert=advisory with{Id="red",Level="red"};
 var currentAlerts=WeatherAlerts.Current([blueAlert,advisory,redAlert],now);
 Check(currentAlerts.Count==3&&currentAlerts[0].Level=="red"&&currentAlerts[2].Level=="blue","Concurrent alerts show highest severity first without losing other warnings");
-Check(WeatherAlerts.Label(advisory)=="暴雨橙色","Warning badge uses short event and explicit color level");
+Check(WeatherAlerts.Label(advisory)=="暴雨"&&WeatherAlerts.Label(blueAlert)=="大风"&&WeatherAlerts.Label(blueAlert with{Event="海上大风"})=="海上大风","Warning badges show event names without redundant color text");
 Check(WeatherAlerts.Current([advisory with{EndsAt=now},blueAlert with{StartsAt=now.AddMinutes(1)}],now).Count==0,"Expired and not-yet-active warnings stay hidden");
 Check(WeatherAlerts.Current([advisory,advisory with{Cancelled=true,IssuedAt=now.AddMinutes(-1)}],now).Count==0,"Cancellation supersedes an older active warning with the same ID");
 Check(WeatherAlerts.Current([advisory with{EndsAt=null,IssuedAt=now.AddDays(-2)}],now).Count==0,"Undated expiry never leaves a stale warning permanently visible");

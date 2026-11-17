@@ -208,6 +208,7 @@ public partial class App : Application
         Forecast=Forecast with{Alerts=active.ToList()};WeatherWindow.Render();_frontendApi?.Notify("weather");
     }
     private readonly TaskbarSlotContinuity _slotContinuity=new();
+    internal bool TaskbarShellTransition;private string? _lastLayoutTrace;
     private void Layout()
     {
         if(FrontendBackend||Exiting)return;var a=Native.ReadTaskbar(Occupancy);if(a==null){SetSlots(new(new(null,"hidden"),new(null,"hidden"),"unavailable"));if(RendererLeases.Current is {} missing)RendererWindows.Hide(missing);return;}
@@ -227,7 +228,10 @@ public partial class App : Application
         var hidden=!a.Visible||Prefs.HideInFullscreen&&Native.ForegroundCoversTaskbar(a);
         if(hidden){WeatherHover.Cancel();MusicHover.Cancel();if(a.AutoHide&&!a.Visible){_motion.Forget(WeatherCapsule);_motion.Forget(MusicCapsule);WeatherCapsule.HideImmediately();MusicCapsule.HideImmediately();}else{WeatherCapsule.HideSurface();MusicCapsule.HideSurface();}SetSlots(new(new(null,"hidden"),new(null,"hidden"),"hidden"));if(RendererLeases.Current is {} invisible)RendererWindows.Hide(invisible);return;}
         var sizes=RendererLeases.Current?.Sizes;var scale=a.Scale;int ww=Prefs.ShowWeather?(int)Math.Ceiling((sizes?.WeatherFullDip??WeatherCapsule.PreferredWeatherWidth(false))*scale):0,mw=(Track!=null||(!ExternalRendererActive&&MusicCapsule.Fading))&&Prefs.ShowMusic?(int)Math.Ceiling((sizes?.MusicFullDip??Prefs.MusicWidth)*scale):0,gap=(int)Math.Ceiling((sizes?.GapDip??Prefs.Gap)*scale);
-        var plan=_reservedLayout.Calculate(bar,a.GeometryVerified?a.Left:a.Right,a.Right,slot,scale,ww,mw,gap,reservation?.Compatible==true,sizes?.WeatherLiteDip??WeatherCapsule.PreferredWeatherWidth(true),sizes?.MusicLiteDip??48,a.GeometryVerified);
+        TaskbarShellTransition=Native.TaskbarShellTransition();
+        var plan=_reservedLayout.Calculate(bar,a.GeometryVerified?a.Left:a.Right,a.Right,slot,scale,ww,mw,gap,reservation?.Compatible==true,sizes?.WeatherLiteDip??WeatherCapsule.PreferredWeatherWidth(true),sizes?.MusicLiteDip??48,a.GeometryVerified,TaskbarShellTransition,reservation?.ExplorerPid??0);
+        var layoutTrace=$"geometry={a.GeometryStatus}; shellTransition={TaskbarShellTransition}; bridge={reservation?.Status}; lite={plan.Capsules.Lite}; elevated={plan.Elevated}; right={plan.Right}";
+        if(layoutTrace!=_lastLayoutTrace){_lastLayoutTrace=layoutTrace;Trace("taskbar-layout",layoutTrace);}
         Reservation?.SetCapsules(WinRT.Interop.WindowNative.GetWindowHandle(MusicCapsule),WinRT.Interop.WindowNative.GetWindowHandle(WeatherCapsule),Environment.ProcessId);
         if(RendererLeases.Current is {Active:true} renderer)Reservation?.SetCapsules((nint)renderer.MusicHwnd,(nint)renderer.WeatherHwnd,renderer.Pid);
         Reservation?.SetWidth(plan.ReserveDip);
@@ -237,7 +241,7 @@ public partial class App : Application
         // Keep both Lite capsules visible above the edge during unavailable / reconnecting native layout.
         // Never fall back to painting over application buttons or dropping music due to crowding.
         if(plan.Elevated){layout=layout with{WeatherWidth=ww>0?(int)Math.Ceiling(WeatherCapsule.PreferredWeatherWidth(true)*scale):0,MusicWidth=mw>0?(int)Math.Ceiling(48*scale):0,Lite=true};bar=new(bar.Left,bar.Top-height-gap,bar.Right,bar.Top-gap);}
-        var slots=SlotPlanner.Calculate(bar,slot?.Right??a.Right,gap,height,layout with{RequiresReservation=false},true,plan.Elevated?0:(int)Math.Round(CapsuleGeometry.TaskbarVerticalOffset*scale));SetSlots(slots);ActivePlacement=layout;
+        var slots=SlotPlanner.Calculate(bar,plan.Right,gap,height,layout with{RequiresReservation=false},true,plan.Elevated?0:(int)Math.Round(CapsuleGeometry.TaskbarVerticalOffset*scale));SetSlots(slots);ActivePlacement=layout;
         if(ExternalRendererActive){var external=RendererLeases.Current!;if(slots.MusicSlot?.Rect==null)Native.ShowWindow((nint)external.MusicHwnd,0);if(slots.WeatherSlot?.Rect==null)Native.ShowWindow((nint)external.WeatherHwnd,0);return;}
         WeatherCapsule.SetLite(layout.Lite);MusicCapsule.SetLite(layout.Lite);
         if(slots.WeatherSlot?.Rect is {} w){PlaceCapsule(WeatherCapsule,w,scale,a.AutoHide);}else {WeatherHover.Cancel();WeatherCapsule.HideSurface();}

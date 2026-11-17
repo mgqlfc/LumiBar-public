@@ -25,7 +25,7 @@ internal static class WeatherAlertBadge
         var text=Ui.Text(WeatherAlerts.Label(first),11);text.TextWrapping=TextWrapping.NoWrap;text.TextTrimming=TextTrimming.CharacterEllipsis;Grid.SetColumn(text,1);row.Children.Add(text);
         if(extraCount>0){var more=Ui.Text($"+{extraCount}",10,.75);Grid.SetColumn(more,2);row.Children.Add(more);}
         var button=new Button{Content=row,HorizontalContentAlignment=HorizontalAlignment.Stretch,Padding=new Thickness(6,3,6,3),MinHeight=26,MinWidth=0,MaxWidth=155,CornerRadius=new CornerRadius(9),BorderThickness=new Thickness(0),Background=Ui.Brush(ColorHelper.FromArgb(20,Color(first.Level).R,Color(first.Level).G,Color(first.Level).B)),VerticalAlignment=VerticalAlignment.Center};
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button,$"{WeatherAlerts.Label(first)}，共 {alerts.Count} 条天气预警，查看详情");
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button,$"{WeatherAlerts.Label(first)}{WeatherAlerts.LevelName(first.Level)}预警，共 {alerts.Count} 条天气预警，查看详情");
         ToolTipService.SetToolTip(button,"查看天气预警详情");
         button.Resources["ButtonBackgroundPointerOver"]=Ui.Brush(ColorHelper.FromArgb(38,Color(first.Level).R,Color(first.Level).G,Color(first.Level).B));button.Resources["ButtonBackgroundPressed"]=Ui.Brush(ColorHelper.FromArgb(55,Color(first.Level).R,Color(first.Level).G,Color(first.Level).B));
         button.Click+=(_,_)=>{
