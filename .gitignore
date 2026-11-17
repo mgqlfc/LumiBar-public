@@ -6,10 +6,13 @@
 !/DISTRIBUTION.md
 !/PRODUCT.md
 !/DESIGN.md
+!/MACOS_HANDOFF.md
+!/.github/
 !/work/
 /work/*
 !/work/LumiBar/
 !/work/BackendTests/
+!/work/FrontendSupportTests/
 !/work/TaskbarBridge/
 !/work/ConceptUI/
 !/work/frontends/
@@ -58,6 +61,8 @@
 **/*.pfx
 **/*.p12
 **/weather-provider.json
+**/antigravity-plugin.config.json
+**/*.nupkg
 /outputs/Antigravity前端接入包/*-check.json
 /outputs/Antigravity前端接入包/backend-tests.txt
 /outputs/和风天气服务器接入包/测试结果.txt

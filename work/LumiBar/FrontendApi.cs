@@ -18,10 +18,13 @@ internal sealed class FrontendApi : IDisposable
     private readonly TaskbarOccupancy _occupancy;
     private readonly PlacementPolicy _placement=new();
     private readonly ChangeFeed _events=new();
-    internal void Notify(string topic)=>_events.Publish(topic);
+    private sealed record SpectrumPlayback(bool Playing,bool Enabled);
+    private SpectrumPlayback _spectrumPlayback=new(false,false);
+    private void CaptureSpectrumPlayback()=>Volatile.Write(ref _spectrumPlayback,new(_app.Track?.Playing==true,_app.Prefs.Spectrum));
+    internal void Notify(string topic){if(topic is "media" or "settings")CaptureSpectrumPlayback();_events.Publish(topic);}
     internal FrontendApi(App app,DispatcherQueue dispatcher)
     {
-        _app=app;_dispatcher=dispatcher;_occupancy=app.Occupancy;_occupancy.Changed+=()=>Notify("windows");
+        _app=app;_dispatcher=dispatcher;_occupancy=app.Occupancy;_occupancy.Changed+=()=>Notify("windows");CaptureSpectrumPlayback();
         using var identity=WindowsIdentity.GetCurrent();
         var owner=Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(identity.User!.Value)))[..12];
         var pipe=InstanceIdentity.PipeName(owner,Process.GetCurrentProcess().SessionId,App.FrontendBackend,Environment.GetEnvironmentVariable("LUMIBAR_DATA_DIR"));
@@ -31,6 +34,10 @@ internal sealed class FrontendApi : IDisposable
     }
     private async Task<object?> Dispatch(FrontendPeer peer,string method,JsonElement args,CancellationToken ct)
     {
+        if(method=="spectrum.get"){
+            ct.ThrowIfCancellationRequested();var playback=Volatile.Read(ref _spectrumPlayback);
+            return new{capturedAt=DateTimeOffset.UtcNow,playing=playback.Playing,source="system-output",status=_app.Spectrum.Status,bands=playback.Playing&&playback.Enabled?_app.Spectrum.Levels():new float[20]};
+        }
         if(method=="fonts.list"){
             var query=args.ValueKind==JsonValueKind.Object&&args.TryGetProperty("query",out var q)?q.ValueKind==JsonValueKind.String?q.GetString()??"":throw new FrontendApiException("invalid_params","query 必须为文本。"):"";
             var offset=args.ValueKind==JsonValueKind.Object&&args.TryGetProperty("offset",out _)?Number(args,"offset"):0;
@@ -91,7 +98,6 @@ internal sealed class FrontendApi : IDisposable
             case "app.shutdown":
                 // Let the pipe flush its acknowledgement before disposal.
                 _=Task.Delay(150).ContinueWith(_=>_dispatcher.TryEnqueue(_app.Quit),TaskScheduler.Default);return new{accepted=true};
-            case "spectrum.get":return new{capturedAt=DateTimeOffset.UtcNow,playing=_app.Track?.Playing==true,source="system-output",status=_app.Spectrum.Status,bands=_app.Track?.Playing==true&&_app.Prefs.Spectrum?_app.Spectrum.Levels():new float[20]};
             case "media.artwork":
                 var track=_app.Track;var wanted=Text(args,"trackKey",128);
                 if(track==null||track.Key!=wanted)throw new FrontendApiException("stale_track","歌曲已经切换。");

@@ -1,5 +1,5 @@
 #ifndef AppVersion
-  #define AppVersion "0.7.48"
+  #define AppVersion "0.7.52"
 #endif
 #ifndef PayloadDir
   #define PayloadDir "..\package-" + AppVersion
@@ -25,7 +25,11 @@ WizardStyle=modern
 SetupIconFile=..\LumiBar\Assets\LumiBar.ico
 UninstallDisplayIcon={app}\LumiBar.exe
 OutputDir=..\..\outputs\安装包
+#ifdef IncludeAntigravity
+OutputBaseFilename=LumiBar-{#AppVersion}-windows-x64-with-antigravity-setup
+#else
 OutputBaseFilename=LumiBar-{#AppVersion}-windows-x64-setup
+#endif
 Compression=lzma2/max
 SolidCompression=yes
 CloseApplications=no

@@ -40,3 +40,7 @@ dotnet build "C:\Users\ROG\Documents\Codex\2026-11-14\ban\work\frontends\antigra
 > 若未启动后端，可在窗口右上角打开 **示例数据** 开关体验完整交互；连接真实后端时，前端自动读取 `C:\Users\ROG\Documents\Codex\2026-11-14\ban\work\frontend-dev-data\frontend-endpoint.json`。
 
 后端 0.7.47 城市栏与胶囊调整见 [UI_POLISH-0.7.47.md](./UI_POLISH-0.7.47.md)。用户最终选择恢复细线播放图标。插件菜单仍见 PLUGIN_MENUS-0.7.46.md。
+
+Win2D、离线构建、40Hz 频谱与 v6 尺寸见 [BACKEND_SYNTHWAVE_SUPPORT-0.7.49.md](./BACKEND_SYNTHWAVE_SUPPORT-0.7.49.md)。
+
+2026-11-17 源码同步：当前配置已升级 v7，歌词浮窗默认 512×384，以上 v6 文档保留为历史接入记录。当前值以 `Sdk/PluginConfig.cs` 和 `antigravity-plugin.defaults.json` 为准；GitHub 手动打包入口见仓库根目录 README 的 Build Release 说明。

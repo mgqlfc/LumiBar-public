@@ -3,10 +3,11 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:AntigravityFrontend.Controls"
+    xmlns:canvas="using:Microsoft.Graphics.Canvas.UI.Xaml"
     Title="LumiBar 歌词与播放控制">
 
     <ContentControl x:Name="FontHost" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" IsTabStop="False">
-        <Border x:Name="RootFrame" CornerRadius="12" BorderThickness="1" Background="#090814">
+        <Border x:Name="RootFrame" CornerRadius="12" BorderThickness="0" Background="#090814">
             <Border.ContextFlyout>
                 <MenuFlyout x:Name="FlyoutMenu">
                     <MenuFlyoutItem x:Name="PinMenuItem" Text="固定浮窗（失焦不自动收起）" Click="OnPinClick" />
@@ -20,10 +21,14 @@
             </Border.ContextFlyout>
 
             <Grid>
-                <!-- Outrun Twilight Sky + Album-Sampled Horizon Sunset + Shimmering Ground Grid -->
-                <Grid x:Name="SynthwaveBackdropHost" IsHitTestVisible="False" SizeChanged="OnSynthwaveBackdropSizeChanged">
-                    <Canvas x:Name="SynthwaveStageCanvas" />
-                </Grid>
+                <!-- Outrun Twilight Sky + Album-Sampled Horizon Sunset + Glow + Fast Perspective Grid (Win2D) -->
+                <canvas:CanvasControl x:Name="SynthwaveBgWin2dCanvas"
+                                      IsHitTestVisible="False"
+                                      ClearColor="Transparent"
+                                      CreateResources="OnSynthBgCreateResources"
+                                      Draw="OnSynthBgDraw"
+                                      SizeChanged="OnSynthBgSizeChanged"
+                                      Unloaded="OnSynthBgUnloaded" />
 
                 <!-- 1:1 4-Zone Vertical Layout -->
                 <Grid>
@@ -54,14 +59,16 @@
                                    FontSize="10" CharacterSpacing="70" VerticalAlignment="Center" />
                     </Grid>
 
-                    <!-- Zone 2: Locked C2 Lyrics Stage -->
-                    <Grid Grid.Row="1">
-                        <ScrollViewer x:Name="LyricsScrollViewer"
-                                      Padding="14,4"
-                                      VerticalScrollBarVisibility="Auto"
-                                      HorizontalScrollBarVisibility="Disabled">
-                            <StackPanel x:Name="LyricsContainer" Spacing="5" VerticalAlignment="Center" />
-                        </ScrollViewer>
+                    <!-- Zone 2: Locked C2 Lyrics Stage (Win2D Scanline PunchOut + VHS 7px TearSlice) -->
+                    <Grid Grid.Row="1" Padding="14,2">
+                        <canvas:CanvasControl x:Name="LyricsWin2dCanvas"
+                                              ClearColor="Transparent"
+                                              CreateResources="OnLyricsCreateResources"
+                                              Draw="OnLyricsDraw"
+                                              SizeChanged="OnLyricsSizeChanged"
+                                              Unloaded="OnLyricsUnloaded"
+                                              Tapped="OnLyricsCanvasTapped"
+                                              PointerWheelChanged="OnLyricsPointerWheelChanged" />
 
                         <StackPanel x:Name="LyricsEmptyPanel"
                                     VerticalAlignment="Center"
@@ -73,7 +80,7 @@
                         </StackPanel>
                     </Grid>
 
-                    <!-- Zone 3: 14x8 Full-Height VFD Spectrum Window (Directly above Console) -->
+                    <!-- Zone 3: 14x8 Full-Height VFD Spectrum Window (Win2D CRT-warped matching screen curvature) -->
                     <Grid Grid.Row="2">
                         <TextBlock Text="0dB PEAK // TACTILE DECK"
                                    FontSize="9"
@@ -87,7 +94,20 @@
                         <controls:SpectrumBackdropControl x:Name="SpectrumBackdrop"
                                                           Height="90"
                                                           VerticalAlignment="Bottom"
-                                                          Margin="15,0,15,2" />
+                                                          Margin="15,0,15,2"
+                                                          Opacity="0"
+                                                          IsHitTestVisible="False" />
+
+                        <canvas:CanvasControl x:Name="SpectrumWin2dCanvas"
+                                              Height="90"
+                                              VerticalAlignment="Bottom"
+                                              Margin="15,0,15,2"
+                                              IsHitTestVisible="False"
+                                              ClearColor="Transparent"
+                                              CreateResources="OnSpectrumWin2dCreateResources"
+                                              Draw="OnSpectrumWin2dDraw"
+                                              SizeChanged="OnSpectrumWin2dSizeChanged"
+                                              Unloaded="OnSpectrumWin2dUnloaded" />
                     </Grid>
 
                     <!-- Zone 4: Single Smoked-Acrylic Console with 4-Pass Reflection & 3 B1 Keys + 32-Seg VFD Progress -->
@@ -98,12 +118,17 @@
                             Padding="10,10"
                             BorderThickness="1">
                         <Grid>
-                            <!-- 56px Top Optical Reflection Canvas (Soft aura + 3-row mirrored bricks + Fresnel + 1.2px rim) -->
-                            <Canvas x:Name="DeckReflectionCanvas"
-                                    Height="56"
-                                    VerticalAlignment="Top"
-                                    Margin="-10,-10,-10,0"
-                                    IsHitTestVisible="False" />
+                            <!-- 56px Top Optical Reflection Win2D Canvas (11px aura + 3.2px mirrored bricks + Fresnel + 1.2px rim) -->
+                            <canvas:CanvasControl x:Name="DeckReflectionCanvas"
+                                                  Height="56"
+                                                  VerticalAlignment="Top"
+                                                  Margin="-10,-10,-10,0"
+                                                  IsHitTestVisible="False"
+                                                  ClearColor="Transparent"
+                                                  CreateResources="OnDeckReflCreateResources"
+                                                  Draw="OnDeckReflDraw"
+                                                  SizeChanged="OnDeckReflSizeChanged"
+                                                  Unloaded="OnDeckReflUnloaded" />
 
                             <StackPanel Spacing="8">
                                 <!-- Console Row A: Art + Track Info + Exact 3-Key B1 Hardware Tray -->
@@ -131,31 +156,50 @@
                                     <Border x:Name="HardwareTray" Grid.Column="2" CornerRadius="6" Padding="4" BorderThickness="1" VerticalAlignment="Center">
                                         <StackPanel Orientation="Horizontal" Spacing="4">
                                             <Button x:Name="PrevBtn" Width="24" Height="24" Padding="0" CornerRadius="4" BorderThickness="1"
+                                                    HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"
                                                     Click="OnPrevClick" ToolTipService.ToolTip="上一首">
-                                                <FontIcon Glyph="&#xE892;" FontSize="10" />
+                                                <Grid>
+                                                    <Border Height="1" VerticalAlignment="Top" Background="#29FFFFFF" Margin="1,0,1,0" IsHitTestVisible="False" />
+                                                    <Path Width="8.5" Height="7.5" Stretch="Uniform" Fill="#BAE6FD"
+                                                          HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                          Data="M0,0 H1.5 V10 H0 Z M6.0,0 L1.7,5 L6.0,10 Z M10.5,0 L6.2,5 L10.5,10 Z" />
+                                                </Grid>
                                             </Button>
                                             <Button x:Name="PlayPauseBtn" Width="30" Height="24" Padding="0" CornerRadius="4" BorderThickness="1"
+                                                    HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"
                                                     Click="OnToggleClick" ToolTipService.ToolTip="播放 / 暂停">
-                                                <Grid Width="28" Height="22">
+                                                <Grid>
+                                                    <Border Height="1" VerticalAlignment="Top" Background="#38FFB45A" Margin="1,0,1,0" IsHitTestVisible="False" />
                                                     <Border Width="6" Height="1.5" CornerRadius="1" Background="#FF7A00"
                                                             VerticalAlignment="Top" HorizontalAlignment="Center" Margin="0,2,0,0"
                                                             IsHitTestVisible="False" />
-                                                    <FontIcon x:Name="PlayPauseGlyph" Glyph="&#xE769;" FontSize="11"
-                                                              VerticalAlignment="Center" HorizontalAlignment="Center" Margin="0,2,0,0" />
+                                                    <Path x:Name="PauseIconPath" Width="8" Height="8" Stretch="Uniform" Fill="#FFD180"
+                                                          HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,2,0,0"
+                                                          Data="M0,0 H3.2 V10 H0 Z M5.8,0 H9 V10 H5.8 Z" />
+                                                    <Path x:Name="PlayIconPath" Width="8" Height="8" Stretch="Uniform" Fill="#FFD180"
+                                                          Visibility="Collapsed"
+                                                          HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0.8,2,0,0"
+                                                          Data="M0,0 L9,5 L0,10 Z" />
                                                 </Grid>
                                             </Button>
                                             <Button x:Name="NextBtn" Width="24" Height="24" Padding="0" CornerRadius="4" BorderThickness="1"
+                                                    HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"
                                                     Click="OnNextClick" ToolTipService.ToolTip="下一首">
-                                                <FontIcon Glyph="&#xE893;" FontSize="10" />
+                                                <Grid>
+                                                    <Border Height="1" VerticalAlignment="Top" Background="#29FFFFFF" Margin="1,0,1,0" IsHitTestVisible="False" />
+                                                    <Path Width="8.5" Height="7.5" Stretch="Uniform" Fill="#BAE6FD"
+                                                          HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                          Data="M0,0 L4.3,5 L0,10 Z M4.5,0 L8.8,5 L4.5,10 Z M9.0,0 H10.5 V10 H9.0 Z" />
+                                                </Grid>
                                             </Button>
                                         </StackPanel>
                                     </Border>
                                 </Grid>
 
-                                <!-- Console Row B: 32-Segment Recessed VFD Progress Track + Timestamps -->
+                                <!-- Console Row B: 32-Segment Recessed VFD Progress Track (Win2D Orange Playhead Glow) + Timestamps -->
                                 <StackPanel Spacing="4">
                                     <Border x:Name="VfdProgressTray"
-                                            Height="12"
+                                            Height="14"
                                             CornerRadius="4"
                                             Padding="4,0"
                                             BorderThickness="1"
@@ -164,7 +208,10 @@
                                             PointerReleased="OnVfdProgressPointerReleased"
                                             PointerCaptureLost="OnVfdProgressPointerCaptureLost"
                                             ToolTipService.ToolTip="点击或拖动跳转进度">
-                                        <Grid x:Name="VfdProgressGrid" ColumnSpacing="2" Height="6" VerticalAlignment="Center" />
+                                        <canvas:CanvasControl x:Name="VfdProgressWin2dCanvas"
+                                                              ClearColor="Transparent"
+                                                              Draw="OnVfdProgressDraw"
+                                                              Unloaded="OnVfdProgressUnloaded" />
                                     </Border>
 
                                     <Grid>
@@ -209,6 +256,13 @@
                         </Grid>
                     </Border>
                 </Grid>
+
+                <!-- Curved CRT Tube Glass Overlay across entire Flyout (Dome sheen + corner tube vignette + scanlines) -->
+                <canvas:CanvasControl x:Name="CrtTubeOverlayCanvas"
+                                      IsHitTestVisible="False"
+                                      ClearColor="Transparent"
+                                      Draw="OnCrtOverlayDraw"
+                                      Unloaded="OnCrtOverlayUnloaded" />
             </Grid>
         </Border>
     </ContentControl>

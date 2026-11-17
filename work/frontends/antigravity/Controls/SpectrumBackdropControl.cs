@@ -29,11 +29,12 @@ public sealed class SpectrumBackdropControl : Canvas
     private readonly double[] _peaks = new double[FullCols];
     private readonly int[] _peakHold = new int[FullCols];
 
-    private SolidColorBrush _cyanBrush = new(Color.FromArgb(255, 0, 245, 212));
-    private SolidColorBrush _amberBrush = new(Color.FromArgb(255, 255, 158, 0));
-    private SolidColorBrush _magentaBrush = new(Color.FromArgb(255, 255, 42, 133));
-    private SolidColorBrush _dimCellBrush = new(Color.FromArgb(24, 148, 163, 184));
-    private SolidColorBrush _bracketBrush = new(Color.FromArgb(62, 0, 245, 212));
+    private SolidColorBrush _cyanBrush = new(Color.FromArgb(255, 90, 168, 160));
+    private SolidColorBrush _amberBrush = new(Color.FromArgb(255, 199, 142, 78));
+    private SolidColorBrush _magentaBrush = new(Color.FromArgb(255, 188, 91, 126));
+    private SolidColorBrush _dimCellBrush = new(Color.FromArgb(22, 125, 138, 153));
+    private SolidColorBrush _bracketBrush = new(Color.FromArgb(56, 90, 168, 160));
+    private readonly List<Rectangle> _patinaLines = new();
 
     private double _opacityScale = 0.85;
     private bool _isPlaying;
@@ -41,7 +42,9 @@ public sealed class SpectrumBackdropControl : Canvas
     private bool _compactMode;
     private double _sensitivity = 1.0;
 
+    public bool SuppressVisuals { get; set; }
     public IReadOnlyList<double> CurrentLevels => _smoothed;
+    public IReadOnlyList<double> CurrentPeaks => _peaks;
 
     public SpectrumBackdropControl()
     {
@@ -94,12 +97,12 @@ public sealed class SpectrumBackdropControl : Canvas
 
     public void UpdateBands(double[]? bands20)
     {
-        if (!_isEnabled || ActualWidth <= 4 || ActualHeight <= 4) return;
+        if (!_isEnabled || (!SuppressVisuals && (ActualWidth <= 4 || ActualHeight <= 4))) return;
 
         int cols = _compactMode ? CompactCols : FullCols;
         for (int c = 0; c < cols; c++)
         {
-            double target = 0.03;
+            double target = 0.02;
             if (_isPlaying && bands20 != null && bands20.Length > 0)
             {
                 double pos = (double)c / Math.Max(1, cols - 1) * (bands20.Length - 1);
@@ -107,18 +110,18 @@ public sealed class SpectrumBackdropControl : Canvas
                 int idx1 = Math.Min(bands20.Length - 1, idx0 + 1);
                 double frac = pos - idx0;
                 double raw = bands20[idx0] * (1 - frac) + bands20[idx1] * frac;
-                // Gentle boost so musical peaks genuinely reach the top VFD ceiling
-                target = Math.Clamp(Math.Pow(raw * _sensitivity, 0.85) * 1.12, 0.08, 1.0);
+                // High-contrast expansion so valleys drop deep and beats kick sharply to top bricks
+                target = Math.Clamp(Math.Pow(Math.Max(0.0, raw) * _sensitivity * 1.24, 1.18), 0.02, 1.0);
             }
 
-            // Conservative automotive VFD damping (smooth attack, measured decay)
-            double factor = target > _smoothed[c] ? 0.28 : 0.11;
+            // Fast transient attack + crisp release for dramatic vertical pump
+            double factor = target > _smoothed[c] ? 0.64 : 0.25;
             _smoothed[c] += (target - _smoothed[c]) * factor;
 
             if (_smoothed[c] >= _peaks[c])
             {
                 _peaks[c] = _smoothed[c];
-                _peakHold[c] = 10;
+                _peakHold[c] = 7;
             }
             else if (_peakHold[c] > 0)
             {
@@ -126,7 +129,7 @@ public sealed class SpectrumBackdropControl : Canvas
             }
             else
             {
-                _peaks[c] = Math.Max(_smoothed[c], _peaks[c] - 0.015);
+                _peaks[c] = Math.Max(_smoothed[c], _peaks[c] - 0.024);
             }
         }
 
@@ -135,6 +138,15 @@ public sealed class SpectrumBackdropControl : Canvas
 
     private void LayoutBricks()
     {
+        if (SuppressVisuals)
+        {
+            foreach (var b in new[] { _tlH, _tlV, _trH, _trV }) b.Visibility = Visibility.Collapsed;
+            foreach (var p in _patinaLines) p.Visibility = Visibility.Collapsed;
+            for (int c = 0; c < FullCols; c++)
+                for (int r = 0; r < FullRows; r++)
+                    _cells[c, r].Visibility = Visibility.Collapsed;
+            return;
+        }
         double w = ActualWidth;
         double h = ActualHeight;
         if (w <= 4 || h <= 4) return;
@@ -187,17 +199,45 @@ public sealed class SpectrumBackdropControl : Canvas
                 bool isPeakCap = !_compactMode && _isPlaying && _peaks[c] > 0.14 && r == peakRow;
                 double frac = (double)(r + 1) / rows;
 
+                double wear = 0.80 + 0.045 * ((c * 5 + r * 9) % 5);
                 if (isLit || isPeakCap)
                 {
                     cell.Fill = frac > 0.78 ? _magentaBrush : (frac > 0.45 ? _amberBrush : _cyanBrush);
-                    cell.Opacity = isPeakCap && !isLit ? 0.94 : (_compactMode ? 0.92 : 0.80);
+                    double baseOp = isPeakCap && !isLit ? 0.86 : (_compactMode ? 0.84 : 0.76);
+                    cell.Opacity = Math.Clamp(baseOp * wear, 0.55, 0.92);
                 }
                 else
                 {
                     cell.Fill = _dimCellBrush;
-                    cell.Opacity = _compactMode ? 0.72 : 0.76;
+                    cell.Opacity = _compactMode ? 0.62 : 0.68;
                 }
             }
         }
+
+        // Subtle vintage VFD cathode wire-mesh overlay lines across capsule spectrum
+        int lineIdx = 0;
+        var meshBrush = new SolidColorBrush(Color.FromArgb(44, 6, 8, 16));
+        for (double my = 2.0; my < h - 1.0; my += 3.5)
+        {
+            Rectangle line;
+            if (lineIdx < _patinaLines.Count)
+            {
+                line = _patinaLines[lineIdx];
+            }
+            else
+            {
+                line = new Rectangle { Fill = meshBrush, IsHitTestVisible = false };
+                _patinaLines.Add(line);
+                Children.Add(line);
+            }
+            line.Visibility = Visibility.Visible;
+            line.Width = w;
+            line.Height = 0.9;
+            SetLeft(line, 0);
+            SetTop(line, my);
+            lineIdx++;
+        }
+        for (int i = lineIdx; i < _patinaLines.Count; i++)
+            _patinaLines[i].Visibility = Visibility.Collapsed;
     }
 }

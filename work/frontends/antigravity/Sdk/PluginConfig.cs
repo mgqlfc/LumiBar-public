@@ -13,7 +13,7 @@ public sealed class PluginConfig
     public string PopupDirection { get; set; } = "Up";  // Up | Down
     public int HoverDelayMs { get; set; } = 220;
     public int ConfigVersion { get; set; } = 0;
-    public double LyricsFlyoutWidth { get; set; } = 420;
+    public double LyricsFlyoutWidth { get; set; } = 512;
     public double LyricsFlyoutHeight { get; set; } = 384;
     public double WeatherFlyoutWidth { get; set; } = 436;
     public double WeatherFlyoutHeight { get; set; } = 900;
@@ -61,16 +61,15 @@ public sealed class PluginConfig
                 var parsed = JsonSerializer.Deserialize<PluginConfig>(json);
                 if (parsed != null)
                 {
-                    if (parsed.ConfigVersion < 6)
+                    if (parsed.ConfigVersion < 7)
                     {
                         if (parsed.WeatherFlyoutHeight < 860)
                             parsed.WeatherFlyoutHeight = 900;
                         if (parsed.WeatherFlyoutWidth < 432)
                             parsed.WeatherFlyoutWidth = 436;
-                        if (parsed.LyricsFlyoutWidth < 416)
-                            parsed.LyricsFlyoutWidth = 420;
+                        parsed.LyricsFlyoutWidth = 512;
                         parsed.LyricsFlyoutHeight = 384;
-                        parsed.ConfigVersion = 6;
+                        parsed.ConfigVersion = 7;
                         parsed.Save();
                     }
                     return ApplyLaunchOverrides(parsed);
@@ -78,7 +77,7 @@ public sealed class PluginConfig
             }
         }
         catch { }
-        return ApplyLaunchOverrides(new PluginConfig { ConfigVersion = 6 });
+        return ApplyLaunchOverrides(new PluginConfig { ConfigVersion = 7 });
     }
 
     private static PluginConfig ApplyLaunchOverrides(PluginConfig config)

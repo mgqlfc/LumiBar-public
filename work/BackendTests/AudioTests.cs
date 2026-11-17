@@ -12,6 +12,11 @@ internal static class AudioTests
         var tone=new SpectrumAnalyzer();float[]? levels=null;for(var i=0;i<2048;i++)levels=tone.Add((float)Math.Sin(2*Math.PI*1000*i/48000),48000);
         Check(levels!=null&&Array.IndexOf(levels,levels.Max())==10,"1 kHz tone peaks in the expected logarithmic frequency band");
         Check(levels!.All(x=>float.IsFinite(x)&&x>=0&&x<=1),"FFT returns twenty finite normalized magnitudes");
+        foreach(var rate in new[]{48000,44100,16000}){
+            var analyzer=new SpectrumAnalyzer();var frames=0;var valid=true;
+            for(var i=0;i<rate;i++){var frame=analyzer.Add((float)Math.Sin(2*Math.PI*1000*i/rate),rate);if(frame!=null){frames++;valid&=frame.Length==20&&frame.All(x=>float.IsFinite(x)&&x>=0&&x<=1);}}
+            Check(frames>=30&&valid,$"Overlapping FFT delivers 30+ fresh valid frames at {rate} Hz including warmup");
+        }
         var silent=new SpectrumAnalyzer();for(var i=0;i<2048;i++)levels=silent.Add(0,48000);Check(levels!.All(x=>x==0),"Silent input does not fabricate spectrum activity");
         var half=new SpectrumAnalyzer();for(var i=0;i<1000;i++)half.Add(1,48000);var replacement=new SpectrumAnalyzer();for(var i=0;i<1048;i++)levels=replacement.Add(0,48000);Check(levels==null,"Replacement capture does not inherit a partial FFT frame");
         var state=new AudioCaptureState();var old=state.Begin();state.Publish(old,Enumerable.Repeat(.5f,20).ToArray(),1000);var current=state.Begin();state.Publish(current,Enumerable.Repeat(.8f,20).ToArray(),1100);

@@ -64,6 +64,7 @@ public sealed partial class WeatherFlyoutWindow : Window
     private bool _animationsEnabled = true;
 
     public bool IsWindowVisible { get; private set; }
+    private readonly Win32WindowHelper.PopupDismissMonitor _dismissMonitor;
 
     public WeatherFlyoutWindow(LumiBarBridgeService bridge, PluginConfig config)
     {
@@ -73,6 +74,10 @@ public sealed partial class WeatherFlyoutWindow : Window
         InitializeComponent();
         Win32WindowHelper.ConfigureBorderlessPopup(this, hideFromAltTab: true, alwaysOnTop: true);
         (_acrylicController, _backdropConfig) = Win32WindowHelper.AttachAcrylicBackdrop(this, true, 0.62);
+        _dismissMonitor = new Win32WindowHelper.PopupDismissMonitor(
+            this,
+            () => IsWindowVisible && _config.CloseOnDeactivate && !_config.PinWeatherFlyout,
+            HidePopup);
 
         _refitTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(45) };
         _refitTimer.Tick += (_, _) =>
@@ -121,8 +126,9 @@ public sealed partial class WeatherFlyoutWindow : Window
         ContentStack.Measure(new global::Windows.Foundation.Size(Math.Max(320, _config.WeatherFlyoutWidth - 40), 2400));
         ApplyTargetHeight(ContentStack.DesiredSize.Height + 48);
 
-        Activate();
+        Win32WindowHelper.ActivatePopupSafely(this);
         Win32WindowHelper.ApplyBorderlessDwmChrome(this);
+        _dismissMonitor.Start();
         _refitTimer.Start();
         if (_animationsEnabled)
             _ambientTimer.Start();
@@ -180,6 +186,7 @@ public sealed partial class WeatherFlyoutWindow : Window
     public void HidePopup()
     {
         IsWindowVisible = false;
+        _dismissMonitor.Stop();
         _ambientTimer.Stop();
         Win32WindowHelper.GetAppWindow(this).Hide();
     }

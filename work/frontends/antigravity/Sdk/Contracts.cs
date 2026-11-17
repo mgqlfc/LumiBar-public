@@ -107,6 +107,7 @@ public sealed class MediaDto
     [JsonPropertyName("duration")] public double Duration { get; set; }
     [JsonPropertyName("hasArtwork")] public bool HasArtwork { get; set; }
     [JsonPropertyName("accent")] public string Accent { get; set; } = "#60CDFF";
+    [JsonPropertyName("secondaryAccent")] public string? SecondaryAccent { get; set; }
     [JsonPropertyName("controls")] public MediaControlsDto? Controls { get; set; }
     [JsonPropertyName("shuffleEnabled")] public bool? ShuffleEnabled { get; set; }
     [JsonPropertyName("repeatMode")] public string? RepeatMode { get; set; }

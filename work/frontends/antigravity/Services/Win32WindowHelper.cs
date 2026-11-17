@@ -32,6 +32,9 @@ public static class Win32WindowHelper
     private const uint SWP_HIDEWINDOW = 0x0080;
     private const int SW_HIDE = 0;
     private const int SW_SHOWNOACTIVATE = 4;
+    private const int SW_SHOW = 5;
+    private const int VK_LBUTTON = 0x01;
+    private const int VK_RBUTTON = 0x02;
     private static readonly IntPtr HWND_TOPMOST = new(-1);
     private const uint MONITOR_DEFAULTTONEAREST = 0x00000002;
 
@@ -97,6 +100,120 @@ public static class Win32WindowHelper
 
     [DllImport("user32.dll")]
     private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    private static extern short GetAsyncKeyState(int vKey);
+
+    [DllImport("user32.dll")]
+    private static extern bool GetCursorPos(out POINT lpPoint);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr WindowFromPoint(POINT Point);
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+
+    public static void ActivatePopupSafely(Window window)
+    {
+        var hwnd = WindowNative.GetWindowHandle(window);
+        if (hwnd == IntPtr.Zero) return;
+        ShowWindow(hwnd, SW_SHOW);
+        SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+        SetForegroundWindow(hwnd);
+        window.Activate();
+    }
+
+    public sealed class PopupDismissMonitor
+    {
+        private readonly Window _window;
+        private readonly Func<bool> _shouldAutoClose;
+        private readonly Action _dismissAction;
+        private readonly DispatcherTimer _pollTimer;
+        private long _armedAtTick;
+        private bool _prevButtonDown;
+        private IntPtr _initialForeground;
+
+        public PopupDismissMonitor(Window window, Func<bool> shouldAutoClose, Action dismissAction)
+        {
+            _window = window;
+            _shouldAutoClose = shouldAutoClose;
+            _dismissAction = dismissAction;
+            _pollTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(45) };
+            _pollTimer.Tick += OnPollTick;
+        }
+
+        public void Start()
+        {
+            _armedAtTick = Environment.TickCount64 + 220;
+            _prevButtonDown = IsMouseButtonDown();
+            _initialForeground = GetForegroundWindow();
+            if (!_pollTimer.IsEnabled)
+                _pollTimer.Start();
+        }
+
+        public void Stop() => _pollTimer.Stop();
+
+        private static bool IsMouseButtonDown()
+            => (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0 || (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0;
+
+        private void OnPollTick(object? sender, object e)
+        {
+            if (!_shouldAutoClose())
+            {
+                _pollTimer.Stop();
+                return;
+            }
+
+            if (Environment.TickCount64 < _armedAtTick)
+            {
+                _prevButtonDown = IsMouseButtonDown();
+                return;
+            }
+
+            var hwnd = WindowNative.GetWindowHandle(_window);
+            if (hwnd == IntPtr.Zero) return;
+
+            var fg = GetForegroundWindow();
+            if (fg != IntPtr.Zero && fg != hwnd && _initialForeground == hwnd)
+            {
+                GetWindowThreadProcessId(fg, out uint fgPid);
+                if (fgPid != (uint)Environment.ProcessId)
+                {
+                    Stop();
+                    _dismissAction();
+                    return;
+                }
+            }
+            if (fg == hwnd)
+                _initialForeground = hwnd;
+
+            bool downNow = IsMouseButtonDown();
+            bool pressedEdge = downNow && !_prevButtonDown;
+            _prevButtonDown = downNow;
+            if (!pressedEdge) return;
+
+            if (!GetCursorPos(out POINT pt)) return;
+            if (GetWindowRect(hwnd, out RECT rc) &&
+                pt.X >= rc.Left && pt.X <= rc.Right && pt.Y >= rc.Top && pt.Y <= rc.Bottom)
+            {
+                return;
+            }
+
+            var hitHwnd = WindowFromPoint(pt);
+            if (hitHwnd != IntPtr.Zero)
+            {
+                GetWindowThreadProcessId(hitHwnd, out uint hitPid);
+                if (hitPid == (uint)Environment.ProcessId)
+                    return;
+            }
+
+            Stop();
+            _dismissAction();
+        }
+    }
 
     public static string GetForegroundHwndHex()
     {

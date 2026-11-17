@@ -30,6 +30,15 @@ try{
     Check (Test-Path -LiteralPath $exe) 'Installed executable exists'
     Check ((Get-FileHash (Join-Path $Payload 'LumiBar.dll')).Hash -eq (Get-FileHash (Join-Path $appDir 'LumiBar.dll')).Hash) 'Installed application matches published payload'
     Check (Test-Path -LiteralPath (Join-Path $appDir 'LumiBar.pri')) 'Merged WinUI theme resources are installed'
+    $pluginRelative='frontends\antigravity\dist';$pluginExe=Join-Path $appDir "$pluginRelative\AntigravityFrontend.exe"
+    $pluginConfigPath=Join-Path $appDir "$pluginRelative\antigravity-plugin.config.json";$pluginConfigHash=$null
+    if(Test-Path -LiteralPath $pluginExe){
+        Check ((Test-Path -LiteralPath (Join-Path $appDir "$pluginRelative\Microsoft.Graphics.Canvas.dll"))-and(Test-Path -LiteralPath (Join-Path $appDir "$pluginRelative\Microsoft.Graphics.Canvas.Interop.dll"))) 'Installed frontend includes native and managed Win2D components'
+        $factory=Get-Content -LiteralPath (Join-Path $appDir "$pluginRelative\antigravity-plugin.defaults.json") -Raw|ConvertFrom-Json
+        Check ($factory.ConfigVersion-eq7-and$factory.LyricsFlyoutWidth-eq512-and$factory.LyricsFlyoutHeight-eq384-and-not(Test-Path -LiteralPath $pluginConfigPath)) 'Installed frontend ships v7 compact defaults without a user config'
+        $graphics=Join-Path $testRoot 'frontend-graphics'
+        Check ((Execute $pluginExe @('--graphics-self-test',('"'+$graphics+'"')))-eq0-and(Get-Content -LiteralPath (Join-Path $graphics 'graphics-result.json') -Raw|ConvertFrom-Json).pass) 'Installed frontend actually renders all Win2D effect probes'
+    }
     $defaultsPath=Join-Path $appDir 'Assets\default-settings.json'
     Check ((Test-Path -LiteralPath $defaultsPath)-and(Get-FileHash -LiteralPath $defaultsPath).Hash-eq(Get-FileHash -LiteralPath (Join-Path $Payload 'Assets\default-settings.json')).Hash) 'Installed default settings manifest matches the payload'
     Check ((Execute $exe @('--frontend-backend','--inspect-glass','--inspect-release')) -eq 0) 'Installed settings UI opens and closes with its native theme resources'
@@ -54,9 +63,11 @@ try{
     Check ($server.WaitForExit(5000)) 'Backend and native shutdown leave no empty process'
     $sentinel=Join-Path $dataDir 'settings-preservation.txt';[IO.File]::WriteAllText($sentinel,'preserve-user-data')
     $savedSettings=Join-Path $dataDir 'settings.json';[IO.File]::WriteAllText($savedSettings,'{"GlassOpacity":0.73,"Glow":0.41,"Gap":12,"AutoStart":false,"AutoLocateCity":false,"AccentColor":"butter"}');$settingsHash=(Get-FileHash -LiteralPath $savedSettings).Hash
+    if(Test-Path -LiteralPath $pluginExe){[IO.File]::WriteAllText($pluginConfigPath,'{"ConfigVersion":7,"LyricsFlyoutWidth":444,"LyricsFlyoutHeight":410}');$pluginConfigHash=(Get-FileHash -LiteralPath $pluginConfigPath).Hash}
     Check ((Execute $Installer @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/NOICONS','/NOSHORTCUTS=1',"/DIR=`"$appDir`"",'/GROUP=LumiBar-QA',"/LOG=`"$testRoot\upgrade.log`"")) -eq 0) 'Reinstallation / upgrade completes'
     Check ((Get-Content -LiteralPath $sentinel -Raw) -eq 'preserve-user-data') 'Upgrade preserves user data'
     Check ((Get-FileHash -LiteralPath $savedSettings).Hash-eq$settingsHash) 'Upgrade does not replace existing preferences with new defaults'
+    if($pluginConfigHash){Check ((Get-FileHash -LiteralPath $pluginConfigPath).Hash-eq$pluginConfigHash) 'Upgrade preserves existing frontend v7 dimensions'}
     $uninstaller=Join-Path $appDir 'unins000.exe'
     Check ((Execute $uninstaller @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/LOG=`"$testRoot\uninstall.log`"")) -eq 0) 'Silent uninstall completes'
     Check (-not(Test-Path -LiteralPath $exe)) 'Uninstall removes application files'

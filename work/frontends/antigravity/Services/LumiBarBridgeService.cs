@@ -389,6 +389,9 @@ public sealed class LumiBarBridgeService : IDisposable
 
     private async Task SpectrumLoopAsync(CancellationToken ct)
     {
+        // Absolute cadence: request latency is part of the 25 ms budget, rather
+        // than adding another delay after every reply. Missed ticks coalesce.
+        using var cadence = new PeriodicTimer(TimeSpan.FromMilliseconds(25));
         while (!ct.IsCancellationRequested)
         {
             if (_config.UseMockMode)
@@ -407,8 +410,8 @@ public sealed class LumiBarBridgeService : IDisposable
                     }
                 }
                 CurrentSpectrum = new SpectrumDto { Playing = playing, Bands = bands, Status = "mock" };
-                NotifyUi(() => SpectrumUpdated?.Invoke());
-                await Task.Delay(36, ct);
+                NotifySpectrumUi();
+                await cadence.WaitForNextTickAsync(ct);
                 continue;
             }
 
@@ -418,7 +421,7 @@ public sealed class LumiBarBridgeService : IDisposable
                 if (CurrentSpectrum.Bands.Any(b => b > 0.001))
                 {
                     CurrentSpectrum = new SpectrumDto { Playing = false, Bands = new double[20] };
-                    NotifyUi(() => SpectrumUpdated?.Invoke());
+                    NotifySpectrumUi();
                 }
                 await Task.Delay(180, ct);
                 continue;
@@ -444,9 +447,9 @@ public sealed class LumiBarBridgeService : IDisposable
                 if (dto != null)
                 {
                     CurrentSpectrum = dto;
-                    NotifyUi(() => SpectrumUpdated?.Invoke());
+                    NotifySpectrumUi();
                 }
-                await Task.Delay(36, ct); // ~28 Hz
+                await cadence.WaitForNextTickAsync(ct); // 40 Hz, no accumulated RPC drift
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
@@ -953,6 +956,17 @@ public sealed class LumiBarBridgeService : IDisposable
         ConnectionStatus = "离线（保留最近快照）";
         LastErrorMessage = message;
         NotifyUi(() => ConnectionChanged?.Invoke());
+    }
+
+    private int _spectrumUiPending;
+    private void NotifySpectrumUi()
+    {
+        if (Interlocked.Exchange(ref _spectrumUiPending, 1) != 0) return;
+        if (!_dispatcher.TryEnqueue(() =>
+        {
+            Interlocked.Exchange(ref _spectrumUiPending, 0);
+            SpectrumUpdated?.Invoke();
+        })) Interlocked.Exchange(ref _spectrumUiPending, 0);
     }
 
     private void NotifyUi(Action action) => _dispatcher.TryEnqueue(() => action());

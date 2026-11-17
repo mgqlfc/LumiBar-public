@@ -2,7 +2,7 @@ using NAudio.CoreAudioApi;
 using NAudio.Wave;
 
 namespace LumiBar;
-internal sealed class SpectrumService : IDisposable
+internal sealed partial class SpectrumService : IDisposable
 {
     private sealed class CaptureSession : IDisposable
     {

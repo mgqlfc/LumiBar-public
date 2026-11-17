@@ -1,0 +1,80 @@
+name: Build Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version (blank uses the project version)'
+        required: false
+        default: ''
+        type: string
+      include_antigravity:
+        description: 'Include the Antigravity frontend plugin'
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows-x64:
+    name: Windows x64 installer
+    runs-on: windows-2022
+    timeout-minutes: 35
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Resolve version
+        id: release
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          $version=$env:REQUESTED_VERSION.Trim()
+          if(-not$version){
+            [xml]$project=Get-Content -LiteralPath work/LumiBar/LumiBar.csproj -Raw
+            $version=[string]$project.Project.PropertyGroup.Version
+          }
+          if($version-notmatch'^\d+\.\d+\.\d+$'){throw 'Use a numeric major.minor.patch version.'}
+          "version=$version" >> $env:GITHUB_OUTPUT
+      - name: Run backend and configuration tests
+        run: |
+          dotnet run --project work/BackendTests/BackendTests.csproj -c Release
+          if($LASTEXITCODE-ne0){throw 'Backend tests failed'}
+          dotnet run --project work/FrontendSupportTests/FrontendSupportTests.csproj -c Release
+          if($LASTEXITCODE-ne0){throw 'Configuration tests failed'}
+      - name: Build native taskbar bridge
+        run: '& ./work/TaskbarBridge/build.ps1'
+      - name: Install Inno Setup
+        run: |
+          choco install innosetup --yes --no-progress
+          if($LASTEXITCODE-ne0){throw 'Inno Setup installation failed'}
+      - name: Build installer
+        env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+          INCLUDE_ANTIGRAVITY: ${{ inputs.include_antigravity }}
+        run: |
+          & ./work/installer/build-release.ps1 -Version $env:RELEASE_VERSION -IncludeAntigravity:($env:INCLUDE_ANTIGRAVITY-eq'true')
+          $hashes=Get-ChildItem -LiteralPath outputs/安装包 -Filter '*-setup.exe' | ForEach-Object {
+            $hash=(Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash  $($_.Name)"
+          }
+          $hashes | Set-Content -LiteralPath outputs/安装包/SHA256SUMS.txt -Encoding utf8
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: LumiBar-${{ steps.release.outputs.version }}-windows-x64
+          path: |
+            outputs/安装包/*-setup.exe
+            outputs/安装包/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 14

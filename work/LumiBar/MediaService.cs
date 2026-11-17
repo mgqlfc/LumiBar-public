@@ -43,6 +43,11 @@ internal sealed class MediaService : IDisposable
         if(key!=_coverKey){
             _artworkCts?.Cancel();_artworkCts?.Dispose();_artworkCts=null;
             _coverKey=key;_cover=null;
+            // Metadata can arrive before its thumbnail. Never pair a new song
+            // with the previous song's colour while artwork is still loading.
+            var fallback=CoverPalette.Extract([]);
+            _accent=Color.FromArgb(255,fallback.Primary.R,fallback.Primary.G,fallback.Primary.B);
+            _secondaryAccent=Color.FromArgb(255,fallback.Secondary.R,fallback.Secondary.G,fallback.Secondary.B);
             if(_artworkCache.TryGetValue(key,out var cached))(_cover,_accent,_secondaryAccent)=cached;
             else if(props.Thumbnail!=null){_artworkCts=new CancellationTokenSource(TimeSpan.FromSeconds(8));_=LoadArtwork(key,props.Thumbnail,_artworkCts.Token);}
             App.Trace("media-latency",$"metadata read={System.Diagnostics.Stopwatch.GetElapsedTime(readAt).TotalMilliseconds:F1}ms event={(_changeAt==0?-1:System.Diagnostics.Stopwatch.GetElapsedTime(_changeAt).TotalMilliseconds):F1}ms");

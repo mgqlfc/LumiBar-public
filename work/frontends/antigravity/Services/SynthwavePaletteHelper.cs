@@ -13,7 +13,7 @@ public static class SynthwavePaletteHelper
 {
     public readonly record struct NeonAlbumPalette(Color Primary, Color Secondary, Color Highlight);
 
-    public static NeonAlbumPalette DeriveAlbumNeonPalette(Color accent)
+    public static NeonAlbumPalette DeriveAlbumNeonPalette(Color accent, string? secondaryAccentHex = null)
     {
         var (h, s, l) = RgbToHsl(accent);
         if (s < 0.14 || (l is < 0.08 or > 0.94))
@@ -25,12 +25,29 @@ public static class SynthwavePaletteHelper
                 Color.FromArgb(255, 253, 224, 71));
         }
 
-        double primarySat = Math.Clamp(Math.Max(s * 1.25, 0.88), 0.86, 0.98);
+        double primarySat = Math.Clamp(Math.Max(s * 1.25, 0.90), 0.88, 0.98);
         double primaryLit = Math.Clamp(l, 0.52, 0.62);
 
         Color primary = HslToRgb(h, primarySat, primaryLit);
-        Color secondary = HslToRgb((h + 46.0) % 360.0, Math.Max(0.86, primarySat - 0.04), 0.56);
-        Color highlight = HslToRgb((h - 26.0 + 360.0) % 360.0, 0.92, 0.68);
+
+        // Synthwave dual-tone separation: avoid monochrome (< 55deg) shifts
+        // Warm hues (red/orange/gold) pair toward electric magenta/cyan-violet; cool hues pair toward violet/magenta
+        double defaultSecHue = (h < 70 || h >= 305)
+            ? (h - 72.0 + 360.0) % 360.0   // Tangerine/Red -> Hyper Magenta/Violet
+            : (h + 95.0) % 360.0;          // Cyan/Emerald -> Violet/Magenta
+
+        Color secondary = HslToRgb(defaultSecHue, Math.Max(0.88, primarySat - 0.02), 0.57);
+        if (!string.IsNullOrWhiteSpace(secondaryAccentHex))
+        {
+            var rawSec = Sdk.WeatherFormatting.ParseHexColor(secondaryAccentHex, secondary);
+            var (sh, ss, sl) = RgbToHsl(rawSec);
+            double hueDiff = Math.Abs(h - sh);
+            if (hueDiff > 180.0) hueDiff = 360.0 - hueDiff;
+            if (ss >= 0.16 && sl is >= 0.10 and <= 0.92 && hueDiff >= 52.0)
+                secondary = HslToRgb(sh, Math.Clamp(Math.Max(ss * 1.25, 0.88), 0.86, 0.98), Math.Clamp(sl, 0.52, 0.62));
+        }
+
+        Color highlight = HslToRgb((h - 24.0 + 360.0) % 360.0, 0.94, 0.68);
         return new NeonAlbumPalette(primary, secondary, highlight);
     }
 
@@ -38,61 +55,73 @@ public static class SynthwavePaletteHelper
         => Color.FromArgb(alpha, color.R, color.G, color.B);
 
     /// <summary>
-    /// Applies the B1 80s Hi-Fi brushed-gunmetal bevel key finish to transport/control buttons.
+    /// Applies the B1 80s Hi-Fi brushed-gunmetal bevel key finish to transport/control buttons,
+    /// overriding WinUI Button visual state brushes so hover/pressed states keep exact hardware material.
     /// </summary>
     public static void ApplyB1KeyStyle(Control btn, bool isPrimary, bool isDark)
     {
+        _ = isDark; // B1 Hi-Fi hardware console always retains its dark brushed gunmetal / burnt bronze chassis finish
+
+        LinearGradientBrush BuildVerticalBrush(Color top, Color mid, Color bot) => new()
+        {
+            StartPoint = new global::Windows.Foundation.Point(0.5, 0),
+            EndPoint = new global::Windows.Foundation.Point(0.5, 1),
+            GradientStops =
+            {
+                new GradientStop { Color = top, Offset = 0.0 },
+                new GradientStop { Color = mid, Offset = 0.50 },
+                new GradientStop { Color = bot, Offset = 1.0 }
+            }
+        };
+
         if (isPrimary)
         {
-            btn.Background = new LinearGradientBrush
-            {
-                StartPoint = new global::Windows.Foundation.Point(0.5, 0),
-                EndPoint = new global::Windows.Foundation.Point(0.5, 1),
-                GradientStops =
-                {
-                    new GradientStop { Color = isDark ? Color.FromArgb(255, 62, 38, 26) : Color.FromArgb(255, 234, 88, 12), Offset = 0.0 },
-                    new GradientStop { Color = isDark ? Color.FromArgb(255, 36, 22, 18) : Color.FromArgb(255, 194, 65, 12), Offset = 0.52 },
-                    new GradientStop { Color = isDark ? Color.FromArgb(255, 22, 13, 11) : Color.FromArgb(255, 154, 52, 18), Offset = 1.0 }
-                }
-            };
-            btn.BorderBrush = new LinearGradientBrush
-            {
-                StartPoint = new global::Windows.Foundation.Point(0.5, 0),
-                EndPoint = new global::Windows.Foundation.Point(0.5, 1),
-                GradientStops =
-                {
-                    new GradientStop { Color = Color.FromArgb(215, 255, 168, 76), Offset = 0.0 },
-                    new GradientStop { Color = Color.FromArgb(220, 12, 8, 10), Offset = 0.32 },
-                    new GradientStop { Color = Color.FromArgb(245, 7, 9, 14), Offset = 1.0 }
-                }
-            };
-            btn.Foreground = new SolidColorBrush(isDark ? Color.FromArgb(255, 255, 209, 128) : Color.FromArgb(255, 255, 247, 237));
+            var bg = BuildVerticalBrush(Color.FromArgb(255, 58, 38, 28), Color.FromArgb(255, 36, 22, 18), Color.FromArgb(255, 23, 14, 12));
+            var bgHover = BuildVerticalBrush(Color.FromArgb(255, 74, 48, 34), Color.FromArgb(255, 48, 29, 23), Color.FromArgb(255, 30, 18, 15));
+            var bgPress = BuildVerticalBrush(Color.FromArgb(255, 34, 21, 16), Color.FromArgb(255, 22, 13, 11), Color.FromArgb(255, 16, 10, 9));
+            var border = BuildVerticalBrush(Color.FromArgb(148, 255, 183, 77), Color.FromArgb(245, 9, 13, 22), Color.FromArgb(255, 6, 8, 14));
+            var fg = new SolidColorBrush(Color.FromArgb(255, 255, 209, 128));
+
+            btn.Background = bg;
+            btn.BorderBrush = border;
+            btn.Foreground = fg;
+            SetButtonStateBrushes(btn, bg, bgHover, bgPress, border, border, fg);
             return;
         }
 
-        btn.Background = new LinearGradientBrush
-        {
-            StartPoint = new global::Windows.Foundation.Point(0.5, 0),
-            EndPoint = new global::Windows.Foundation.Point(0.5, 1),
-            GradientStops =
-            {
-                new GradientStop { Color = isDark ? Color.FromArgb(255, 43, 53, 75) : Color.FromArgb(255, 241, 245, 249), Offset = 0.0 },
-                new GradientStop { Color = isDark ? Color.FromArgb(255, 25, 32, 48) : Color.FromArgb(255, 226, 232, 240), Offset = 0.50 },
-                new GradientStop { Color = isDark ? Color.FromArgb(255, 16, 21, 34) : Color.FromArgb(255, 203, 213, 225), Offset = 1.0 }
-            }
-        };
-        btn.BorderBrush = new LinearGradientBrush
-        {
-            StartPoint = new global::Windows.Foundation.Point(0.5, 0),
-            EndPoint = new global::Windows.Foundation.Point(0.5, 1),
-            GradientStops =
-            {
-                new GradientStop { Color = Color.FromArgb(isDark ? (byte)84 : (byte)220, 255, 255, 255), Offset = 0.0 },
-                new GradientStop { Color = Color.FromArgb(220, 9, 13, 22), Offset = 0.35 },
-                new GradientStop { Color = Color.FromArgb(240, 7, 10, 18), Offset = 1.0 }
-            }
-        };
-        btn.Foreground = new SolidColorBrush(isDark ? Color.FromArgb(255, 186, 230, 253) : Color.FromArgb(255, 30, 41, 59));
+        var kBg = BuildVerticalBrush(Color.FromArgb(255, 43, 53, 75), Color.FromArgb(255, 25, 32, 48), Color.FromArgb(255, 16, 21, 34));
+        var kBgHover = BuildVerticalBrush(Color.FromArgb(255, 56, 68, 96), Color.FromArgb(255, 34, 43, 64), Color.FromArgb(255, 22, 28, 45));
+        var kBgPress = BuildVerticalBrush(Color.FromArgb(255, 24, 30, 44), Color.FromArgb(255, 16, 20, 32), Color.FromArgb(255, 11, 14, 24));
+        var kBorder = BuildVerticalBrush(Color.FromArgb(88, 255, 255, 255), Color.FromArgb(245, 9, 13, 22), Color.FromArgb(255, 6, 8, 14));
+        var kFg = new SolidColorBrush(Color.FromArgb(255, 186, 230, 253));
+
+        btn.Background = kBg;
+        btn.BorderBrush = kBorder;
+        btn.Foreground = kFg;
+        SetButtonStateBrushes(btn, kBg, kBgHover, kBgPress, kBorder, kBorder, kFg);
+    }
+
+    private static void SetButtonStateBrushes(
+        Control btn,
+        Brush normalBg,
+        Brush hoverBg,
+        Brush pressBg,
+        Brush border,
+        Brush hoverBorder,
+        Brush fg)
+    {
+        btn.Resources["ButtonBackground"] = normalBg;
+        btn.Resources["ButtonBackgroundPointerOver"] = hoverBg;
+        btn.Resources["ButtonBackgroundPressed"] = pressBg;
+        btn.Resources["ButtonBackgroundDisabled"] = normalBg;
+        btn.Resources["ButtonBorderBrush"] = border;
+        btn.Resources["ButtonBorderBrushPointerOver"] = hoverBorder;
+        btn.Resources["ButtonBorderBrushPressed"] = border;
+        btn.Resources["ButtonBorderBrushDisabled"] = border;
+        btn.Resources["ButtonForeground"] = fg;
+        btn.Resources["ButtonForegroundPointerOver"] = fg;
+        btn.Resources["ButtonForegroundPressed"] = fg;
+        btn.Resources["ButtonForegroundDisabled"] = new SolidColorBrush(Color.FromArgb(110, 148, 163, 184));
     }
 
     private static (double H, double S, double L) RgbToHsl(Color c)

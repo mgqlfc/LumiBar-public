@@ -1,6 +1,6 @@
 # LumiBar 备选前端接入说明
 
-更新：2026-11-15。协议：`LumiBar Frontend API v1`，当前发布版本 `0.7.48`；hello 的 backendVersion 暂为系列标识 `0.7-dev`。新增字段向后兼容；前端应允许字段缺失，以兼容旧后端。
+更新：2026-11-15。协议：`LumiBar Frontend API v1`，当前发布版本 `0.7.49`；hello 的 backendVersion 暂为系列标识 `0.7-dev`。新增字段向后兼容；前端应允许字段缺失，以兼容旧后端。
 
 新增 [插件菜单注册](./PLUGIN_MENUS-0.7.46.md)：只支持托盘与设置左侧，附已验证的 C# 示例。
 
@@ -276,3 +276,5 @@ Node / Electron 可导入 `lumibar-client.mjs`。建议在主进程维护连接�
 最新界面协作：[城市栏与音乐胶囊微调](./UI_POLISH-0.7.47.md)。播放控件按用户最终选择恢复细线。
 
 [0.7.48 胶囊整体下移](./CAPSULE_ALIGNMENT-0.7.48.md)：槽位已包含 2 DIP 偏移，前端不要重复添加。
+
+Synthwave 底层依赖与状态对齐见 [BACKEND_SYNTHWAVE_SUPPORT-0.7.49.md](./BACKEND_SYNTHWAVE_SUPPORT-0.7.49.md)。

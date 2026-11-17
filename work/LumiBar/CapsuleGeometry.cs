@@ -2,7 +2,7 @@ namespace LumiBar;
 internal static class CapsuleGeometry
 {
     internal const double Height=34,Radius=Height/2,Gutter=10;
-    internal const double TaskbarVerticalOffset=2;
+    internal const double TaskbarVerticalOffset=1;
     internal const double OuterHeight=Height+Gutter*2;
     // Shared pill silhouette in physical pixels. Width/height retain fractional
     // DPI precision; the bitmap allocation may round up without moving the shape.

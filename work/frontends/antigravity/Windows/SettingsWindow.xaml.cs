@@ -48,7 +48,7 @@ public sealed partial class SettingsWindow : Window
 
             MusicWidthSlider.Maximum = 340;
             MusicWidthSlider.Minimum = 180;
-            LyricsWidthSlider.Maximum = 520;
+            LyricsWidthSlider.Maximum = 640;
             LyricsWidthSlider.Minimum = 320;
             LyricsHeightSlider.Maximum = 680;
             LyricsHeightSlider.Minimum = 340;

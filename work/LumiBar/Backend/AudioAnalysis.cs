@@ -31,8 +31,13 @@ internal sealed class SpectrumAnalyzer
     internal float[]? Add(float sample,int sampleRate)
     {
         _samples[_count++]=float.IsFinite(sample)?sample:0;
-        if(_count<Size)return null;_count=0;
+        if(_count<Size)return null;
         for(var i=0;i<Size;i++){_real[i]=_samples[i]*_window[i];_imag[i]=0;}
+        // Keep the 2048-sample frequency resolution, but use overlapping windows.
+        // At 44.1/48 kHz this produces 86/94 analysis frames per second, leaving
+        // headroom for packetized WASAPI callbacks and the 40 Hz IPC consumer.
+        var hop=sampleRate>0?Math.Min(Size/4,Math.Max(1,sampleRate/60)):Size/4;
+        Array.Copy(_samples,hop,_samples,0,Size-hop);_count=Size-hop;
         for(int i=1,j=0;i<Size;i++){
             var bit=Size>>1;for(; (j&bit)!=0;bit>>=1)j^=bit;j^=bit;
             if(i<j){(_real[i],_real[j])=(_real[j],_real[i]);(_imag[i],_imag[j])=(_imag[j],_imag[i]);}

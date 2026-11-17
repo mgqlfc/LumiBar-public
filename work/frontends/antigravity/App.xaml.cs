@@ -187,6 +187,13 @@ public partial class App : Application
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
+        var arguments = Environment.GetCommandLineArgs();
+        var graphicsProbe = Array.IndexOf(arguments, "--graphics-self-test");
+        if (graphicsProbe >= 0 && graphicsProbe + 1 < arguments.Length)
+        { Rendering.GraphicsSelfTest.Start(this, arguments[graphicsProbe + 1]); return; }
+        var spectrumProbe = Array.IndexOf(arguments, "--spectrum-self-test");
+        if (spectrumProbe >= 0 && spectrumProbe + 2 < arguments.Length)
+        { Services.SpectrumSelfTest.Start(this, arguments[spectrumProbe + 1], arguments[spectrumProbe + 2]); return; }
         try
         {
             bool taskbarLaunch = PluginConfig.IsTaskbarLaunchMode;

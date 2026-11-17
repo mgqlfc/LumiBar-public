@@ -1,7 +1,22 @@
+param([string]$MsvcRoot,[string]$WindowsSdkRoot,[string]$WindowsSdkVersion)
 $ErrorActionPreference='Stop'
-$vs='C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.44.35207'
-$sdk='C:/Program Files (x86)/Windows Kits/10'
-$version='10.0.26100.0'
+if(-not$MsvcRoot){
+    $vswhere=Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+    if(-not(Test-Path -LiteralPath $vswhere)){throw 'Install Visual Studio C++ desktop tools first.'}
+    $installation=& $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+    if(-not$installation){throw 'Visual Studio C++ desktop tools were not found.'}
+    $toolVersion=(Get-Content -LiteralPath (Join-Path $installation 'VC\Auxiliary\Build\Microsoft.VCToolsVersion.default.txt') -Raw).Trim()
+    $MsvcRoot=Join-Path $installation "VC\Tools\MSVC\$toolVersion"
+}
+if(-not$WindowsSdkRoot){$WindowsSdkRoot=Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10'}
+if(-not$WindowsSdkVersion){
+    $WindowsSdkVersion=Get-ChildItem -LiteralPath (Join-Path $WindowsSdkRoot 'Include') -Directory |
+        Where-Object {$_.Name-match'^10\.0\.\d+\.\d+$'-and(Test-Path -LiteralPath (Join-Path $WindowsSdkRoot "Lib\$($_.Name)\um\x64\windowsapp.lib"))} |
+        Sort-Object {[version]$_.Name} -Descending | Select-Object -First 1 -ExpandProperty Name
+}
+if(-not$WindowsSdkVersion){throw 'Install the Windows 10/11 SDK first.'}
+$vs=$MsvcRoot;$sdk=$WindowsSdkRoot;$version=$WindowsSdkVersion
+if(-not(Test-Path -LiteralPath (Join-Path $vs 'bin\Hostx64\x64\cl.exe'))){throw 'The selected x64 MSVC compiler is missing.'}
 $env:INCLUDE="$vs/include;$sdk/Include/$version/ucrt;$sdk/Include/$version/shared;$sdk/Include/$version/um;$sdk/Include/$version/winrt;$sdk/Include/$version/cppwinrt"
 $env:LIB="$vs/lib/x64;$sdk/Lib/$version/ucrt/x64;$sdk/Lib/$version/um/x64"
 $build=Join-Path $PSScriptRoot 'build'
