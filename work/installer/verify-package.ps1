@@ -30,6 +30,8 @@ try{
     Check (Test-Path -LiteralPath $exe) 'Installed executable exists'
     Check ((Get-FileHash (Join-Path $Payload 'LumiBar.dll')).Hash -eq (Get-FileHash (Join-Path $appDir 'LumiBar.dll')).Hash) 'Installed application matches published payload'
     Check (Test-Path -LiteralPath (Join-Path $appDir 'LumiBar.pri')) 'Merged WinUI theme resources are installed'
+    $bridge='LumiBar.TaskbarBridge.v6.dll'
+    Check ((Test-Path -LiteralPath (Join-Path $appDir $bridge))-and(Get-FileHash -LiteralPath (Join-Path $Payload $bridge)).Hash-eq(Get-FileHash -LiteralPath (Join-Path $appDir $bridge)).Hash) 'Installed native layering and reservation component matches the v6 payload'
     $pluginRelative='frontends\antigravity\dist';$pluginExe=Join-Path $appDir "$pluginRelative\AntigravityFrontend.exe"
     $pluginConfigPath=Join-Path $appDir "$pluginRelative\antigravity-plugin.config.json";$pluginConfigHash=$null
     if(Test-Path -LiteralPath $pluginExe){

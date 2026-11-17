@@ -1,4 +1,4 @@
-param([string]$Version='0.7.54',[switch]$IncludeAntigravity,[switch]$OfflineFrontend,[switch]$NoRestore,[string]$IsccPath)
+param([string]$Version='0.7.56',[switch]$IncludeAntigravity,[switch]$OfflineFrontend,[switch]$NoRestore,[string]$IsccPath)
 $ErrorActionPreference='Stop'
 $workspace=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 $suffix=if($IncludeAntigravity){'-with-antigravity'}else{''}
@@ -13,7 +13,7 @@ if(-not$IsccPath){
     $IsccPath=$candidates|Where-Object {$_-and(Test-Path -LiteralPath $_)}|Select-Object -First 1
 }
 if(-not$IsccPath-or-not(Test-Path -LiteralPath $IsccPath)){throw 'Install Inno Setup or supply -IsccPath.'}
-if(-not(Test-Path -LiteralPath (Join-Path $workspace 'work\TaskbarBridge\build\LumiBar.TaskbarBridge.v5.dll'))){
+if(-not(Test-Path -LiteralPath (Join-Path $workspace 'work\TaskbarBridge\build\LumiBar.TaskbarBridge.v6.dll'))){
     & (Join-Path $workspace 'work\TaskbarBridge\build.ps1')
 }
 if(-not$NoRestore){

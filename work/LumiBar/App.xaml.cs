@@ -208,13 +208,13 @@ public partial class App : Application
         Forecast=Forecast with{Alerts=active.ToList()};WeatherWindow.Render();_frontendApi?.Notify("weather");
     }
     private readonly TaskbarSlotContinuity _slotContinuity=new();
-    internal bool TaskbarShellTransition;private string? _lastLayoutTrace;
+    private string? _lastLayoutTrace;
     private void Layout()
     {
         if(FrontendBackend||Exiting)return;var a=Native.ReadTaskbar(Occupancy);if(a==null){SetSlots(new(new(null,"hidden"),new(null,"hidden"),"unavailable"));if(RendererLeases.Current is {} missing)RendererWindows.Hide(missing);return;}
         var reservation=Reservation?.Snapshot;var bar=new ScreenRect(a.Bar.Left,a.Bar.Top,a.Bar.Right,a.Bar.Bottom);
         var hasCapsules=Prefs.ShowWeather||Prefs.ShowMusic&&Track!=null;
-        var slot=_slotContinuity.Resolve(bar,a.Scale,reservation?.ExplorerPid??0,hasCapsules&&reservation?.Reserved==true?reservation.Slot:null,hasCapsules?reservation?.Status??"unavailable":"disabled",a.AutoHide,Environment.TickCount64);
+        var slot=_slotContinuity.Resolve(bar,a.Scale,a.ExplorerPid,hasCapsules&&reservation?.ExplorerPid==a.ExplorerPid&&reservation.Reserved?reservation.Slot:null,hasCapsules?reservation?.Status??"unavailable":"disabled",a.AutoHide,Environment.TickCount64);
         if(a.AutoHide&&!a.Visible&&Reservation!=null){
             var warmSizes=RendererLeases.Current?.Sizes;var warmScale=a.Scale;
             var warmWeather=Prefs.ShowWeather?(int)Math.Ceiling((warmSizes?.WeatherFullDip??WeatherCapsule.PreferredWeatherWidth(false))*warmScale):0;
@@ -228,9 +228,8 @@ public partial class App : Application
         var hidden=!a.Visible||Prefs.HideInFullscreen&&Native.ForegroundCoversTaskbar(a);
         if(hidden){WeatherHover.Cancel();MusicHover.Cancel();if(a.AutoHide&&!a.Visible){_motion.Forget(WeatherCapsule);_motion.Forget(MusicCapsule);WeatherCapsule.HideImmediately();MusicCapsule.HideImmediately();}else{WeatherCapsule.HideSurface();MusicCapsule.HideSurface();}SetSlots(new(new(null,"hidden"),new(null,"hidden"),"hidden"));if(RendererLeases.Current is {} invisible)RendererWindows.Hide(invisible);return;}
         var sizes=RendererLeases.Current?.Sizes;var scale=a.Scale;int ww=Prefs.ShowWeather?(int)Math.Ceiling((sizes?.WeatherFullDip??WeatherCapsule.PreferredWeatherWidth(false))*scale):0,mw=(Track!=null||(!ExternalRendererActive&&MusicCapsule.Fading))&&Prefs.ShowMusic?(int)Math.Ceiling((sizes?.MusicFullDip??Prefs.MusicWidth)*scale):0,gap=(int)Math.Ceiling((sizes?.GapDip??Prefs.Gap)*scale);
-        TaskbarShellTransition=Native.TaskbarShellTransition();
-        var plan=_reservedLayout.Calculate(bar,a.GeometryVerified?a.Left:a.Right,a.Right,slot,scale,ww,mw,gap,reservation?.Compatible==true,sizes?.WeatherLiteDip??WeatherCapsule.PreferredWeatherWidth(true),sizes?.MusicLiteDip??48,a.GeometryVerified,TaskbarShellTransition,reservation?.ExplorerPid??0);
-        var layoutTrace=$"geometry={a.GeometryStatus}; shellTransition={TaskbarShellTransition}; bridge={reservation?.Status}; lite={plan.Capsules.Lite}; elevated={plan.Elevated}; right={plan.Right}";
+        var plan=_reservedLayout.Calculate(bar,a.GeometryVerified?a.Left:a.Right,a.Right,slot,scale,ww,mw,gap,reservation?.ExplorerPid==a.ExplorerPid&&reservation.Compatible,sizes?.WeatherLiteDip??WeatherCapsule.PreferredWeatherWidth(true),sizes?.MusicLiteDip??48,a.GeometryVerified,a.ExplorerPid);
+        var layoutTrace=$"geometry={a.GeometryStatus}; explorer={a.ExplorerPid}; bridge={reservation?.Status}; lite={plan.Capsules.Lite}; elevated={plan.Elevated}; right={plan.Right}";
         if(layoutTrace!=_lastLayoutTrace){_lastLayoutTrace=layoutTrace;Trace("taskbar-layout",layoutTrace);}
         Reservation?.SetCapsules(WinRT.Interop.WindowNative.GetWindowHandle(MusicCapsule),WinRT.Interop.WindowNative.GetWindowHandle(WeatherCapsule),Environment.ProcessId);
         if(RendererLeases.Current is {Active:true} renderer)Reservation?.SetCapsules((nint)renderer.MusicHwnd,(nint)renderer.WeatherHwnd,renderer.Pid);

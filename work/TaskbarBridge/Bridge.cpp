@@ -19,7 +19,7 @@ using namespace Windows::UI::Xaml;
 using namespace Windows::UI::Xaml::Controls;
 using namespace Windows::UI::Xaml::Media;
 static HINSTANCE g_module;
-static constexpr wchar_t WindowClass[]=L"LumiBar.Reservation.Dispatch.v5";
+static constexpr wchar_t WindowClass[]=L"LumiBar.Reservation.Dispatch.v6";
 static std::atomic<HWND> g_layerWindow{};
 static std::atomic<bool> g_layerQueued{false};
 static void CALLBACK LayerEvent(HWINEVENTHOOK,DWORD event,HWND hwnd,LONG,LONG,DWORD,DWORD){
@@ -44,6 +44,7 @@ struct Bridge : implements<Bridge,IObjectWithSite,IVisualTreeServiceCallback2> {
     ColumnDefinition column{nullptr};
     bool inserted{};
     uint64_t started{};
+    HRESULT treeError{S_OK};
     HRESULT Attach(std::wstring const& name,HWND sender=nullptr) {
         if(shared)return HRESULT_FROM_WIN32(ERROR_BUSY);
         if(name.rfind(L"Local\\LumiBar.Reservation.",0)!=0||name.size()>160)return E_INVALIDARG;
@@ -199,6 +200,10 @@ struct Bridge : implements<Bridge,IObjectWithSite,IVisualTreeServiceCallback2> {
             // restart can fail-fast inside XamlDiagnostics::GiveRootsToCallback.
             if(mode==2||GetTickCount64()-heartbeat>3000||WaitForSingleObject(owner,0)==WAIT_OBJECT_0){ReleaseLease();return;}
             SyncBands(music,weather,capsulePid);
+            // Visual-tree enumeration can fail independently of window layering.
+            // Keep this broker and its lease alive so Start/Search band changes
+            // still reach the capsules, without claiming a reserved XAML slot.
+            if(FAILED(treeError)){Report(7,treeError);return;}
             if(!parent&&!stack)Discover();
             if(!parent&&!stack){if(GetTickCount64()-started>5000)Report(5);return;}
             if(!(parent?parent.XamlRoot():stack.XamlRoot())){RemoveSpacer();parent=nullptr;stack=nullptr;Report(1);return;}
@@ -234,13 +239,13 @@ struct Bridge : implements<Bridge,IObjectWithSite,IVisualTreeServiceCallback2> {
         if(self){
             if(message==WM_COPYDATA){
                 auto packet=(COPYDATASTRUCT*)lp;
-                if(!wp||!packet||packet->dwData!=0x4c423502||packet->cbData<sizeof(wchar_t)||packet->cbData>322||packet->cbData%sizeof(wchar_t))return 0;
+                if(!wp||!packet||packet->dwData!=0x4c423602||packet->cbData<sizeof(wchar_t)||packet->cbData>322||packet->cbData%sizeof(wchar_t))return 0;
                 auto value=(wchar_t*)packet->lpData;auto count=packet->cbData/sizeof(wchar_t);if(!value||value[count-1]!=0)return 0;
                 try{return SUCCEEDED(self->Attach(std::wstring(value,count-1),(HWND)wp))?1:0;}catch(...){return 0;}
             }
             if(message==WM_TIMER){self->Tick();return 0;}
             if(message==WM_APP+2){g_layerQueued=false;self->SyncLayerRequest();return 0;}
-            if(message==WM_APP+1){self->Report(6,(HRESULT)wp);self->stop=true;return 0;}
+            if(message==WM_APP+1){self->treeError=(HRESULT)wp;self->Report(7,self->treeError);return 0;}
             if(message==WM_CLOSE){g_layerWindow=nullptr;g_layerQueued=false;if(self->layerForeground)UnhookWinEvent(self->layerForeground);if(self->layerObjects)UnhookWinEvent(self->layerObjects);self->ReleaseLease();KillTimer(hwnd,1);DestroyWindow(hwnd);return 0;}
             if(message==WM_NCDESTROY){SetWindowLongPtrW(hwnd,GWLP_USERDATA,0);self->window=nullptr;self->Release();}
         }

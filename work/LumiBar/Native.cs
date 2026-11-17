@@ -126,7 +126,8 @@ internal static partial class Native
             var overlap=Math.Min(bar.Bottom,screenBottom)-Math.Max(bar.Top,monitor.Monitor.Top);
             onScreen=autoHide?overlap>2:overlap>bar.Height*.6;
         }
-        return new(bar,left,right,scale,IsWindowVisible(h)&&bar.Height>8&&onScreen,measured&&trayFound,measured&&trayFound?"measured":"unavailable",measuredAt,trayWidth,autoHide,screenBottom);
+        GetWindowThreadProcessId(h,out var explorerPid);
+        return new(bar,left,right,scale,IsWindowVisible(h)&&bar.Height>8&&onScreen,measured&&trayFound,measured&&trayFound?"measured":"unavailable",measuredAt,trayWidth,autoHide,screenBottom,explorerPid);
     }
 
     internal static void Place(Window window,int x,int y,int width,int height)
@@ -169,7 +170,7 @@ internal static partial class Native
         return FullscreenPolicy.Covers(new(r.Left,r.Top,r.Right,r.Bottom),new(area.Bar.Left,area.Bar.Top,area.Bar.Right,Math.Min(area.Bar.Bottom,area.ScreenBottom)),name.ToString(),shellPid!=0&&foregroundPid==shellPid);
     }
 }
-internal record TaskbarArea(Native.Rect Bar,int Left,int Right,double Scale,bool Visible,bool GeometryVerified=false,string GeometryStatus="unmeasured",DateTimeOffset? MeasuredAt=null,int? TrayWidthPx=null,bool AutoHide=false,int ScreenBottom=int.MaxValue);
+internal record TaskbarArea(Native.Rect Bar,int Left,int Right,double Scale,bool Visible,bool GeometryVerified=false,string GeometryStatus="unmeasured",DateTimeOffset? MeasuredAt=null,int? TrayWidthPx=null,bool AutoHide=false,int ScreenBottom=int.MaxValue,uint ExplorerPid=0);
 
 internal static class Placement
 {

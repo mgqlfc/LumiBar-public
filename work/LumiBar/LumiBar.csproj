@@ -4,7 +4,7 @@
     <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
     <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
     <RootNamespace>LumiBar</RootNamespace>
-    <Version>0.7.54</Version>
+    <Version>0.7.56</Version>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Assets/LumiBar.ico</ApplicationIcon>
     <Platforms>x64</Platforms>
@@ -26,7 +26,7 @@
     <Content Remove="Assets/weather-atlas.png;Assets/Weather/**" />
     <Content Update="Assets/weather-icons-clean.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Update="Assets/LumiBar.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-    <Content Include="../TaskbarBridge/build/LumiBar.TaskbarBridge.v5.dll" Link="LumiBar.TaskbarBridge.v5.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../TaskbarBridge/build/LumiBar.TaskbarBridge.v6.dll" Link="LumiBar.TaskbarBridge.v6.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <FrameworkReference Include="Microsoft.WindowsDesktop.App.WPF" />
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.251106002" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.4654" />

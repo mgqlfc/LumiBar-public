@@ -3,12 +3,6 @@ using System.Runtime.InteropServices;
 
 namespace LumiBar;
 
-internal sealed record ReservationSnapshot(string Status,int Error,ScreenRect? Slot,double WidthDip,uint ExplorerPid,long At,int LayerError=0,uint TaskbarBand=0,uint LayerRepairs=0)
-{
-    internal bool Compatible=>Status is "ready" or "reserved";
-    internal bool Reserved=>Status=="reserved"&&Slot is {} r&&r.Right>r.Left&&Environment.TickCount64-At<800;
-}
-
 /// <summary>Owns the in-box XAML diagnostics connection and a bounded native layout lease.</summary>
 internal sealed class TaskbarReservation : IDisposable
 {
@@ -24,7 +18,7 @@ internal sealed class TaskbarReservation : IDisposable
     internal event Action? Changed;
     internal TaskbarReservation(){_ownerWindow=WinRT.Interop.WindowNative.GetWindowHandle(App.Instance.WeatherCapsule);_worker=Task.Run(Run);}
     internal void SetWidth(double dip)=>Volatile.Write(ref _desiredWidth,double.IsFinite(dip)?Math.Clamp(dip,0,700):0);
-    private void Publish(ReservationSnapshot value){var old=Interlocked.Exchange(ref _snapshot,value);if(old.Status!=value.Status||old.ExplorerPid!=value.ExplorerPid)App.Trace("reservation",$"{old.Status}->{value.Status}; explorer={value.ExplorerPid}; error=0x{value.Error:x8}");if(old.Status!=value.Status||old.Slot!=value.Slot||old.ExplorerPid!=value.ExplorerPid)Changed?.Invoke();}
+    private void Publish(ReservationSnapshot value){var old=Interlocked.Exchange(ref _snapshot,value);if(old.Status!=value.Status||old.ExplorerPid!=value.ExplorerPid||old.Error!=value.Error)App.Trace("reservation",$"{old.Status}->{value.Status}; explorer={value.ExplorerPid}; error=0x{value.Error:x8}; callbacks={value.CallbackCount}; candidates={value.CandidateCount}; discovery=0x{value.DiscoveryError:x8}; container={value.ContainerKind}");if(old.Status!=value.Status||old.Slot!=value.Slot||old.ExplorerPid!=value.ExplorerPid)Changed?.Invoke();}
     private async Task Run()
     {
         (uint pid,nint hwnd) attempted=default;long nextAttempt=0;
@@ -46,7 +40,7 @@ internal sealed class TaskbarReservation : IDisposable
             Publish(new("previous-owner-busy",unchecked((int)0x800700aa),null,0,pid,Environment.TickCount64));return;
         }
         if(Native.FindWindow("Shell_TrayWnd",null)!=bar)return;
-        var dll=Path.Combine(AppContext.BaseDirectory,"LumiBar.TaskbarBridge.v5.dll");
+        var dll=Path.Combine(AppContext.BaseDirectory,"LumiBar.TaskbarBridge.v6.dll");
         if(!File.Exists(dll)){Publish(new("component-missing",0,null,0,pid,0));return;}
         // Explorer retains the native module until it exits. Load a verified,
         // content-addressed user-data copy so upgrades never replace a loaded DLL.
@@ -62,11 +56,11 @@ internal sealed class TaskbarReservation : IDisposable
         // The native entry point may take time. Keep the lease alive independently.
         using var pulse=new Timer(_=>{lock(view)Write(1,Volatile.Read(ref _desiredWidth));},null,0,200);
         try {
-            int hr=unchecked((int)0x80070490);var clsid=new Guid("582ffb86-1107-42a6-8391-eab07d3f4a61");
+            int hr=unchecked((int)0x80070490);var clsid=new Guid("717163a7-1a1c-4717-a313-710e7e627148");
             var broker=FindBroker(pid);
             if(broker!=0){
                 var text=Marshal.StringToHGlobalUni(name);
-                try{var packet=new CopyData{Kind=(nuint)0x4c423502,Length=(uint)((name.Length+1)*2),Data=text};hr=SendMessageTimeout(broker,0x4a,_ownerWindow,ref packet,3,1500,out var accepted)!=0&&accepted==1?0:unchecked((int)0x800700aa);}
+                try{var packet=new CopyData{Kind=(nuint)0x4c423602,Length=(uint)((name.Length+1)*2),Data=text};hr=SendMessageTimeout(broker,0x4a,_ownerWindow,ref packet,3,1500,out var accepted)!=0&&accepted==1?0:unchecked((int)0x800700aa);}
                 finally{Marshal.FreeHGlobal(text);}
                 App.Trace("reservation",$"reuse resident broker explorer={pid}; result=0x{hr:x8}");
             }else{
@@ -86,9 +80,9 @@ internal sealed class TaskbarReservation : IDisposable
                     var rect=new ScreenRect(view.ReadInt32(64),view.ReadInt32(68),view.ReadInt32(72),view.ReadInt32(76));var actual=view.ReadDouble(80);
                     Thread.MemoryBarrier();
                     if(seq==view.ReadInt32(44)){
-                        var label=status switch{1=>"connecting",2=>"ready",3=>"reserved",4=>"released",5=>"unsupported",6=>"failed",_=>"connecting"};
+                        var label=status switch{1=>"connecting",2=>"ready",3=>"reserved",4=>"released",5=>"unsupported",6=>"failed",7=>"layer-only",_=>"connecting"};
                         if(at>0&&Environment.TickCount64-at>1500)label="stale";
-                        Publish(new(label,error,status==3?rect:null,actual,pid,at,view.ReadInt32(132),view.ReadUInt32(136),view.ReadUInt32(140)));
+                        Publish(new(label,error,status==3?rect:null,actual,pid,at,view.ReadInt32(132),view.ReadUInt32(136),view.ReadUInt32(140),view.ReadUInt32(96),view.ReadUInt32(100),view.ReadInt32(104),view.ReadUInt32(108)));
                         if(status is 4 or 5 or 6||Environment.TickCount64-connectedAt>8000&&status<2)break;
                     }
                 }
@@ -103,7 +97,7 @@ internal sealed class TaskbarReservation : IDisposable
     }
     public void Dispose(){_stop.Cancel();SetWidth(0);}
     internal async Task StopAsync(){Dispose();try{await _worker.WaitAsync(TimeSpan.FromSeconds(3));}catch(TimeoutException){App.Trace("reservation","release wait timed out; next attachment still waits for native owner");}}
-    private static nint FindBroker(uint pid){nint window=0;while((window=FindWindowEx(new nint(-3),window,"LumiBar.Reservation.Dispatch.v5",null))!=0){GetWindowThreadProcessId(window,out var owner);if(owner==pid)return window;}return 0;}
+    private static nint FindBroker(uint pid){nint window=0;while((window=FindWindowEx(new nint(-3),window,"LumiBar.Reservation.Dispatch.v6",null))!=0){GetWindowThreadProcessId(window,out var owner);if(owner==pid)return window;}return 0;}
     [StructLayout(LayoutKind.Sequential)]private struct CopyData{internal nuint Kind;internal uint Length;internal nint Data;}
     [DllImport("user32.dll",CharSet=CharSet.Unicode)]private static extern nint FindWindowEx(nint parent,nint after,string name,string? title);
     [DllImport("user32.dll",CharSet=CharSet.Unicode,SetLastError=true)]private static extern nint SendMessageTimeout(nint hwnd,uint message,nint sender,ref CopyData data,uint flags,uint timeout,out nuint result);

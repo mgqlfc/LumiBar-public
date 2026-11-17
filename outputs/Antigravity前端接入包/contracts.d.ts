@@ -87,7 +87,7 @@ export interface WindowHints {
   renderingOwner?: RenderingOwner; slotsVersion?: number; renderer?: RendererStatus;
 }
 /** Physical pixel geometry. at uses a monotonic clock, not Unix time. */
-export interface ReservationSnapshot { status: string; error: number; slot: Omit<Rect, 'visible'> | null; widthDip: number; explorerPid: number; at: number; layerError?: number; taskbarBand?: number; layerRepairs?: number; }
+export interface ReservationSnapshot { status: string; error: number; slot: Omit<Rect, 'visible'> | null; widthDip: number; explorerPid: number; at: number; layerError?: number; taskbarBand?: number; layerRepairs?: number; callbackCount?: number; candidateCount?: number; discoveryError?: number; containerKind?: number; }
 export interface ReservationState { snapshot: ReservationSnapshot | null; slots: RendererSlots | null; owner: RenderingOwner; slotsVersion: number; renderer: RendererStatus; }
 /** Slot rect has four edges only. Visibility comes from mode/state, not rect.visible or builtin anchors. */
 export interface CapsuleSlot { rect: Omit<Rect, 'visible'> | null; mode: 'full' | 'lite' | 'hidden'; }

@@ -23,6 +23,6 @@ $build=Join-Path $PSScriptRoot 'build'
 New-Item -ItemType Directory -Path $build -Force | Out-Null
 Push-Location $build
 try {
-    & "$vs/bin/Hostx64/x64/cl.exe" /nologo /utf-8 /std:c++20 /EHsc /O2 /Zi /Zo /MT /DUNICODE /D_UNICODE /LD ../Bridge.cpp /Fe:LumiBar.TaskbarBridge.v5.dll /link /DEBUG /PDBALTPATH:LumiBar.TaskbarBridge.v5.pdb /DEF:../Bridge.def windowsapp.lib user32.lib ole32.lib oleaut32.lib
+    & "$vs/bin/Hostx64/x64/cl.exe" /nologo /utf-8 /std:c++20 /EHsc /O2 /Zi /Zo /MT /DUNICODE /D_UNICODE /LD ../Bridge.cpp /Fe:LumiBar.TaskbarBridge.v6.dll /link /DEBUG /PDBALTPATH:LumiBar.TaskbarBridge.v6.pdb /DEF:../Bridge.def windowsapp.lib user32.lib ole32.lib oleaut32.lib
     if($LASTEXITCODE -ne 0){throw 'Native bridge build failed'}
 } finally {Pop-Location}

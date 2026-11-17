@@ -27,6 +27,10 @@ internal static class ExtensionTests
         var blocked=SlotPlanner.Calculate(bar,900,8,34,new PlacementPolicy().Calculate(850,900,104,238,8,1),true);
         Check(blocked.State=="reservation-required"&&blocked.MusicSlot==null&&blocked.WeatherSlot==null,"Unavailable reserved space never creates overlapping slot coordinates");
         var hidden=SlotPlanner.Calculate(bar,900,8,34,full,false);Check(hidden.State=="hidden"&&hidden.MusicSlot?.Mode=="hidden","Hidden taskbar yields hidden slots");
+        var reservedSnapshot=new ReservationSnapshot("reserved",0,new(500,1000,900,1080),400,42,Environment.TickCount64);
+        Check(reservedSnapshot.Compatible&&reservedSnapshot.Reserved,"A fresh acknowledged native slot grants reservation ownership");
+        var layerOnly=reservedSnapshot with{Status="layer-only",Error=unchecked((int)0x8000ffff),TaskbarBand=6};
+        Check(!layerOnly.Compatible&&!layerOnly.Reserved,"Working window layering never grants an external renderer a stale or unreserved slot");
         var reservationPolicy=new ReservationLayoutPolicy();var nativeBar=new ScreenRect(0,1000,2000,1080);
         var roomy=reservationPolicy.Calculate(nativeBar,500,1700,null,1,104,238,8,true);
         Check(!roomy.Capsules.Lite&&roomy.ReserveDip==366&&!roomy.Elevated,"Verified blank space keeps full capsules in the taskbar during native acknowledgement");
@@ -43,20 +47,20 @@ internal static class ExtensionTests
         Check(offline.Elevated&&offline.Capsules.MusicWidth>0&&offline.Capsules.WeatherWidth>0,"Unavailable bridge retains both capsules without drawing over taskbar apps");
         var startPolicy=new ReservationLayoutPolicy();
         var startBaseline=startPolicy.Calculate(nativeBar,500,1700,null,1,104,238,8,false,explorerPid:42);
-        var startOpen=startPolicy.Calculate(nativeBar,1900,1900,null,1,104,238,8,false,geometryVerified:false,shellTransition:true,explorerPid:42);
+        var startOpen=startPolicy.Calculate(nativeBar,1900,1900,null,1,104,238,8,false,geometryVerified:false,explorerPid:42);
         Check(!startOpen.Elevated&&!startOpen.Capsules.Lite&&startOpen.Right==startBaseline.Right,"Start menu UIA loss preserves both edges and full mode while the bridge is unavailable");
         var startRecovered=startPolicy.Calculate(nativeBar,500,1700,null,1,104,238,8,false,explorerPid:42);
         Check(!startRecovered.Elevated&&startRecovered.Right==startOpen.Right,"Start menu closure returns to fresh geometry without moving capsules");
-        var trayGrowth=startPolicy.Calculate(nativeBar,650,650,null,1,104,238,8,false,geometryVerified:false,shellTransition:true,explorerPid:42);
+        var trayGrowth=startPolicy.Calculate(nativeBar,650,650,null,1,104,238,8,false,geometryVerified:false,explorerPid:42);
         Check(trayGrowth.Capsules.Lite&&trayGrowth.Right==650,"Real tray growth still reduces capacity during a shell transition");
-        var replaced=startPolicy.Calculate(nativeBar,1900,1900,null,1,104,238,8,false,geometryVerified:false,shellTransition:true,explorerPid:43);
+        var replaced=startPolicy.Calculate(nativeBar,1900,1900,null,1,104,238,8,false,geometryVerified:false,explorerPid:43);
         Check(replaced.Elevated,"Explorer restart never reuses another process's measured blank space");
-        var resized=startPolicy.Calculate(nativeBar with{Right=2400},1900,1900,null,1,104,238,8,false,geometryVerified:false,shellTransition:true,explorerPid:42);
+        var resized=startPolicy.Calculate(nativeBar with{Right=2400},1900,1900,null,1,104,238,8,false,geometryVerified:false,explorerPid:42);
         Check(resized.Elevated,"Taskbar geometry change invalidates retained shell-transition measurements");
-        var unknown=new ReservationLayoutPolicy().Calculate(nativeBar,1700,1700,null,1,104,238,8,false,geometryVerified:false,shellTransition:true,explorerPid:42);
+        var unknown=new ReservationLayoutPolicy().Calculate(nativeBar,1700,1700,null,1,104,238,8,false,geometryVerified:false,explorerPid:42);
         Check(unknown.Elevated,"A shell overlay without a previous measurement does not invent free space");
-        var endGrace=startPolicy.Calculate(nativeBar,1900,1900,null,1,104,238,8,false,geometryVerified:false,shellTransition:false,explorerPid:42);
-        Check(endGrace.Elevated,"Persistent measurement loss outside shell transitions still requires a safe fallback");
+        var endGrace=startPolicy.Calculate(nativeBar,1900,1900,null,1,104,238,8,false,geometryVerified:false,explorerPid:42);
+        Check(!endGrace.Elevated&&!endGrace.Capsules.Lite&&endGrace.Right==1700,"Context menu and search measurement gaps retain the verified layout without a foreground whitelist");
         return results;
     }
 }
