@@ -1,10 +1,12 @@
 # LumiBar Mac 移植交接
 
-2026-11-17。目标系统：macOS 27。Windows 当前实机版本：0.7.56。制作人：Ma Guanqun with Codex。
+2026-11-19 更新。目标系统：macOS 27。Windows 视觉基准：0.7.56 内置前端。制作人：Ma Guanqun with Codex。
+
+先读 [Mac 视觉还原包](outputs/Mac前端还原包/README.md)：14 张实机参考、实际尺寸、字体、配色、动效、模拟数据、资源哈希和 Mac 分支差异清单。本次明确采用 **Mac 入口 + Windows 浮窗风格**；天气胶囊本身也尽量还原。音乐入口围绕刘海重新排布，歌词和天气详情保持内置版的视觉体系。
 
 ## 已选定的方向
 
-音乐围绕 MacBook 的刘海做灵动岛式界面，天气单独放在右侧系统菜单栏。此轮准备了设计与源码，Mac 原生工程留待 MacBook 上建立。
+音乐围绕 MacBook 的刘海做灵动岛式界面，天气单独放在右侧系统菜单栏。Mac 原生工程目前位于 `codex/macos-port` 分支；在 Mac 上继续构建和实机校准。浮窗按最新还原包核对，根目录早期 DESIGN.md 与概念图用于补充方向。
 
 ![LumiBar macOS 27 概念图](outputs/concepts/LumiBar-macOS27-concept-v1.png)
 
@@ -48,14 +50,15 @@ git clone https://github.com/mgqlfc/LumiBar.git
 cd LumiBar
 ```
 
-如果已经克隆且本地改动已提交：
+如果已经克隆且本地改动已提交，在 Mac 工作分支合入参考资料：
 
 ```sh
-git switch main
-git pull --ff-only
+git fetch origin
+git switch codex/macos-port
+git merge origin/main
 ```
 
-在 Mac 上安装支持目标 SDK 的 Xcode。先建立音乐岛、天气菜单栏入口和浮窗交互，再接入真实天气与播放器，最后检查音频权限、多屏、全屏和自动隐藏行为。Windows 打包脚本生成 Windows x64 EXE；Mac 工程建立后单独提供 `.app` / `.dmg` 流程。
+在 Mac 上安装支持目标 SDK 的 Xcode。先按还原包固定字体、栅格、图标、圆角和图层，再打磨材质与动效，最后检查真实天气、播放器、音频权限、多屏、全屏和自动隐藏行为。Mac 构建与打包入口见该分支 `work/LumiBarMac/README.md`；Windows 打包脚本仍生成 Windows x64 EXE。保留 Mac 上的本地代码和工作分支，先保存改动再合并。
 
 ## 同步范围
 

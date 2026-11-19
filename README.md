@@ -4,6 +4,8 @@ Ma Guanqun with Codex
 
 Windows 11 任务栏天气与音乐双胶囊。当前版本 0.7.56，使用 C# / .NET 8 / WinUI 3；原生 C++ 组件处理任务栏空间预留和窗口层级。自带天气详情、系统媒体控制、频谱、同步歌词和可替换前端接口。Mac 版目标 macOS 27：音乐围绕刘海展开，天气放在右侧菜单栏，详见 [Mac 移植交接](MACOS_HANDOFF.md)。
 
+Mac 视觉对齐先看 [还原包](outputs/Mac前端还原包/README.md)：Mac 入口、Windows 内置浮窗风格，天气胶囊也尽量还原；附 14 张真实参考、尺寸/字体/动效参数与 `codex/macos-port` 分支差异清单。
+
 ## 目录
 
 - `work/LumiBar`：当前 Windows 主程序，含内置前端与后端。

@@ -1,0 +1,643 @@
+{
+  "schemaVersion": 1,
+  "baselineWindowsVersion": "0.7.56",
+  "capturedDate": "2026-11-19",
+  "captureMethod": "Computer Use window screenshot; normalized logical dimensions",
+  "captures": [
+    {
+      "file": "references/music-dark.png",
+      "metadata": "references/music-dark.json",
+      "scene": "music",
+      "theme": "Dark",
+      "pngPixels": [
+        452,
+        682
+      ],
+      "nativePixels": [
+        748,
+        1130
+      ],
+      "sourceDpiScale": 1.65625,
+      "approxScreenshotPixelsPerDip": 1.0008355614973263,
+      "visibleInsetsDip": [
+        16,
+        16,
+        16,
+        16
+      ]
+    },
+    {
+      "file": "references/music-light.png",
+      "metadata": "references/music-light.json",
+      "scene": "music",
+      "theme": "Light",
+      "pngPixels": [
+        452,
+        682
+      ],
+      "nativePixels": [
+        748,
+        1130
+      ],
+      "sourceDpiScale": 1.65625,
+      "approxScreenshotPixelsPerDip": 1.0008355614973263,
+      "visibleInsetsDip": [
+        16,
+        16,
+        16,
+        16
+      ]
+    },
+    {
+      "file": "references/settings-dark.png",
+      "metadata": "references/settings-dark.json",
+      "scene": "settings",
+      "theme": "Dark",
+      "pngPixels": [
+        592,
+        682
+      ],
+      "nativePixels": [
+        980,
+        1130
+      ],
+      "sourceDpiScale": 1.65625,
+      "approxScreenshotPixelsPerDip": 1.0005102040816327,
+      "visibleInsetsDip": [
+        16,
+        16,
+        16,
+        16
+      ]
+    },
+    {
+      "file": "references/settings-light.png",
+      "metadata": "references/settings-light.json",
+      "scene": "settings",
+      "theme": "Light",
+      "pngPixels": [
+        592,
+        682
+      ],
+      "nativePixels": [
+        980,
+        1130
+      ],
+      "sourceDpiScale": 1.65625,
+      "approxScreenshotPixelsPerDip": 1.0005102040816327,
+      "visibleInsetsDip": [
+        16,
+        16,
+        16,
+        16
+      ]
+    },
+    {
+      "file": "references/weather-alerts-light.png",
+      "metadata": "references/weather-alerts-light.json",
+      "scene": "weather-alerts",
+      "theme": "Light",
+      "pngPixels": [
+        512,
+        742
+      ],
+      "nativePixels": [
+        848,
+        1229
+      ],
+      "sourceDpiScale": 1.65625,
+      "approxScreenshotPixelsPerDip": 1.0,
+      "visibleInsetsDip": [
+        16,
+        16,
+        16,
+        16
+      ]
+    },
+    {
+      "file": "references/weather-capsule-dark.png",
+      "metadata": "references/weather-capsule-dark.json",
+      "scene": "weather-capsule",
+      "theme": "Dark",
+      "pngPixels": [
+        124,
+        54
+      ],
+      "nativePixels": [
+        206,
+        90
+      ],
+      "sourceDpiScale": 1.65625,
+      "approxScreenshotPixelsPerDip": 0.9969660194174758,
+      "visibleInsetsDip": [
+        10,
+        10,
+        10,
+        10
+      ]
+    },
+    {
+      "file": "references/weather-capsule-light.png",
+      "metadata": "references/weather-capsule-light.json",
+      "scene": "weather-capsule",
+      "theme": "Light",
+      "pngPixels": [
+        124,
+        54
+      ],
+      "nativePixels": [
+        206,
+        90
+      ],
+      "sourceDpiScale": 1.65625,
+      "approxScreenshotPixelsPerDip": 0.9969660194174758,
+      "visibleInsetsDip": [
+        10,
+        10,
+        10,
+        10
+      ]
+    },
+    {
+      "file": "references/weather-dark.png",
+      "metadata": "references/weather-dark.json",
+      "scene": "weather",
+      "theme": "Dark",
+      "pngPixels": [
+        512,
+        742
+      ],
+      "nativePixels": [
+        848,
+        1229
+      ],
+      "sourceDpiScale": 1.65625,
+      "approxScreenshotPixelsPerDip": 1.0,
+      "visibleInsetsDip": [
+        16,
+        16,
+        16,
+        16
+      ]
+    },
+    {
+      "file": "references/weather-hover-dark.png",
+      "metadata": "references/weather-hover-dark.json",
+      "scene": "weather-hover",
+      "theme": "Dark",
+      "pngPixels": [
+        296,
+        192
+      ],
+      "nativePixels": [
+        490,
+        318
+      ],
+      "sourceDpiScale": 1.65625,
+      "approxScreenshotPixelsPerDip": 1.0005102040816327,
+      "visibleInsetsDip": [
+        16,
+        16,
+        16,
+        16
+      ]
+    },
+    {
+      "file": "references/weather-hover-light.png",
+      "metadata": "references/weather-hover-light.json",
+      "scene": "weather-hover",
+      "theme": "Light",
+      "pngPixels": [
+        296,
+        192
+      ],
+      "nativePixels": [
+        490,
+        318
+      ],
+      "sourceDpiScale": 1.65625,
+      "approxScreenshotPixelsPerDip": 1.0005102040816327,
+      "visibleInsetsDip": [
+        16,
+        16,
+        16,
+        16
+      ]
+    },
+    {
+      "file": "references/weather-light.png",
+      "metadata": "references/weather-light.json",
+      "scene": "weather",
+      "theme": "Light",
+      "pngPixels": [
+        512,
+        742
+      ],
+      "nativePixels": [
+        848,
+        1229
+      ],
+      "sourceDpiScale": 1.65625,
+      "approxScreenshotPixelsPerDip": 1.0,
+      "visibleInsetsDip": [
+        16,
+        16,
+        16,
+        16
+      ]
+    },
+    {
+      "file": "references/weather-lite-dark.png",
+      "metadata": "references/weather-lite-dark.json",
+      "scene": "weather-lite",
+      "theme": "Dark",
+      "pngPixels": [
+        85,
+        54
+      ],
+      "nativePixels": [
+        140,
+        90
+      ],
+      "sourceDpiScale": 1.65625,
+      "approxScreenshotPixelsPerDip": 1.0055803571428572,
+      "visibleInsetsDip": [
+        10,
+        10,
+        10,
+        10
+      ]
+    },
+    {
+      "file": "references/weather-lite-light.png",
+      "metadata": "references/weather-lite-light.json",
+      "scene": "weather-lite",
+      "theme": "Light",
+      "pngPixels": [
+        85,
+        54
+      ],
+      "nativePixels": [
+        140,
+        90
+      ],
+      "sourceDpiScale": 1.65625,
+      "approxScreenshotPixelsPerDip": 1.0055803571428572,
+      "visibleInsetsDip": [
+        10,
+        10,
+        10,
+        10
+      ]
+    },
+    {
+      "file": "references/weather-wide-light.png",
+      "metadata": "references/weather-wide-light.json",
+      "scene": "weather-wide",
+      "theme": "Light",
+      "pngPixels": [
+        146,
+        54
+      ],
+      "nativePixels": [
+        241,
+        90
+      ],
+      "sourceDpiScale": 1.65625,
+      "approxScreenshotPixelsPerDip": 1.0033713692946058,
+      "visibleInsetsDip": [
+        10,
+        10,
+        10,
+        10
+      ]
+    }
+  ],
+  "sources": [
+    {
+      "path": "work/LumiBar/CapsuleGeometry.cs",
+      "sha256LF": "4d5d9fc6e4337dd9cf4e627aca49224a06b6da7d0018ce4758243a423bffbc3d"
+    },
+    {
+      "path": "work/LumiBar/CapsuleWindow.cs",
+      "sha256LF": "02285014b42c5ce5763765f1199a0dea0868adfad5a7a006a4253ffd0972fa00"
+    },
+    {
+      "path": "work/LumiBar/CapsuleEdge.cs",
+      "sha256LF": "612dd45fc259384a3a021b4617c56181e77dae3c63c6946ee9fb5af0fef767fe"
+    },
+    {
+      "path": "work/LumiBar/CapsuleTransparency.cs",
+      "sha256LF": "60757d1ec3dc1a85003d765728c710e409e88d42bba7713366effdc0aee9c5f6"
+    },
+    {
+      "path": "work/LumiBar/RoundedLightSurface.cs",
+      "sha256LF": "0edc88b10245da3e054db83a9e647d7d09f536b7a427a98e47c46747210cce0b"
+    },
+    {
+      "path": "work/LumiBar/GlassBackdrop.cs",
+      "sha256LF": "cb48fa24a6dfc5154c7ff12ad80cb6a765f6519e3715d9874a3b7d93d6265bb5"
+    },
+    {
+      "path": "work/LumiBar/SurfaceWindow.cs",
+      "sha256LF": "02b9acfe41a3046873ab446b26911755f5c7a542b7998c8f02808278064088cf"
+    },
+    {
+      "path": "work/LumiBar/PopupShadow.cs",
+      "sha256LF": "4b4c7ec80787cc8594192896afcc6edd0df8ee69065724e761f08e604eaea03d"
+    },
+    {
+      "path": "work/LumiBar/SoftLightTexture.cs",
+      "sha256LF": "4829c91114d0be8d079ef75b110ab8926da43265fc0edfa3606501f343801867"
+    },
+    {
+      "path": "work/LumiBar/WeatherWindow.cs",
+      "sha256LF": "f5b2904e7628575f0545d0ed5798bc59313010b9a7f0fcc3664681e96a186905"
+    },
+    {
+      "path": "work/LumiBar/WeatherGlyph.cs",
+      "sha256LF": "e06c5d1b9b65d70164901107ffb050981114d78cc2908768e1838f7e7d4e6faf"
+    },
+    {
+      "path": "work/LumiBar/WeatherAtmosphere.cs",
+      "sha256LF": "f5337b1cc9ad57d091154bac475014d129740324b0c5517bf40cd5b589cd78e0"
+    },
+    {
+      "path": "work/LumiBar/TemperaturePalette.cs",
+      "sha256LF": "3189836e14a3847e88c46aff0bf664cf2f86f348238f304d6e3172dc720a33f7"
+    },
+    {
+      "path": "work/LumiBar/WeatherAlertBadge.cs",
+      "sha256LF": "87a78a030ccec35c418c77a939ff74922e38dac9f1c150be02a12d9c66bb9693"
+    },
+    {
+      "path": "work/LumiBar/HoverPreviewWindow.cs",
+      "sha256LF": "983b1cab142de5d4c9eff9fe47bade98163698867a5e9aa67afe26bd4acc6fb4"
+    },
+    {
+      "path": "work/LumiBar/MusicWindow.cs",
+      "sha256LF": "2c0076cd6f19df0da935caa00fff10f7b03797bd7f8c69faa2f4a2a865e0d8c5"
+    },
+    {
+      "path": "work/LumiBar/FadingLyricsHost.cs",
+      "sha256LF": "4efc66a984f9c616ae43b4eb6b8339e9769962c1244dfd57756a8fe51682cd47"
+    },
+    {
+      "path": "work/LumiBar/MarqueeTitle.cs",
+      "sha256LF": "7ba2646620c2dedaa50c07c8da82d65be8ad706ba91b4d2c2d27c99dc3fbb822"
+    },
+    {
+      "path": "work/LumiBar/AlbumAtmosphere.cs",
+      "sha256LF": "e3c15a4f85c8c8d6edc4441e547c0649d9fec08e6b4277f39d9c91482546188f"
+    },
+    {
+      "path": "work/LumiBar/AlbumLightColor.cs",
+      "sha256LF": "3857fad7a4c864b4055496143215ce42f271d08d3bf9f900a54ec4e970e7a1bb"
+    },
+    {
+      "path": "work/LumiBar/AnimatedReveal.cs",
+      "sha256LF": "e664eb8cd7abbdc4049f59b565d07b8f4e34fe497ae7ccb8d6aa1973fadaaa07"
+    },
+    {
+      "path": "work/LumiBar/WindowMotion.cs",
+      "sha256LF": "8092fea84681318e930344b76feaa9391de85c0d7dc2b6bf71707cb4f47a738b"
+    },
+    {
+      "path": "work/LumiBar/SettingsWindow.cs",
+      "sha256LF": "c2c9d68f82f68223708decd6fc32be9aba721d0a0f9273feafcfcdc85f31dbc3"
+    },
+    {
+      "path": "work/LumiBar/Backend/FontDefaults.cs",
+      "sha256LF": "7d7cee8f8752caaabec7d6eabe6db10a9d518de8e0832224fba8c398b9dae7d7"
+    },
+    {
+      "path": "work/LumiBar/Backend/GlassDensity.cs",
+      "sha256LF": "6049bac489b574959ea0f3479dd18d44d02bacb33e1552f142e9a1e071e5da6c"
+    },
+    {
+      "path": "work/LumiBar/Backend/CoverPalette.cs",
+      "sha256LF": "56e57b55369ef5d28d34e77ae40a3fb7119a3457ed5348b52750ccb06acc15e0"
+    },
+    {
+      "path": "work/LumiBar/Backend/AccentPalettes.cs",
+      "sha256LF": "58fb760a83d1e2da44f54b9130d0ea90e9e8643f3aaf878d4f68a241d86810d0"
+    },
+    {
+      "path": "work/LumiBar/Backend/LyricLayout.cs",
+      "sha256LF": "9c2f393befc4061d6cd9a228c59ae0ffc1881ac070cba0888b1ddeb6d277434d"
+    },
+    {
+      "path": "work/LumiBar/Backend/LyricFade.cs",
+      "sha256LF": "d6ec65052ce4f704913e7f2ede47bac24570628d962403f5eb4046e5440c1472"
+    },
+    {
+      "path": "work/LumiBar/Assets/default-settings.json",
+      "sha256LF": "52ce02c45f937c1fa381ef40c9fdae30326e5d4b10767fe15bba7e46fa90cc64"
+    }
+  ],
+  "assets": [
+    {
+      "path": "work/LumiBar/Assets/weather-icons-clean.png",
+      "sha256": "2b32a7a3ee11f15f5108e665a2f484c91d8609174e9c26a4e22db2a2044eced9",
+      "bytes": 1243380,
+      "pngWidth": 1254,
+      "pngHeight": 1254
+    },
+    {
+      "path": "work/LumiBar/Assets/Fonts/Geist-VariableFont_wght.ttf",
+      "sha256": "b17278190bd0c2be811fe2c3060be95f1aa40cd34e237478743d7c100c28005d",
+      "bytes": 148832
+    },
+    {
+      "path": "work/LumiBar/Assets/Fonts/Geist-Italic-VariableFont_wght.ttf",
+      "sha256": "fe2b81b70b7b347e653d3cb3fb04241507c52a3b3fb6b87e0bd5200a7a1fdf50",
+      "bytes": 174320
+    },
+    {
+      "path": "work/LumiBar/Assets/Fonts/PingFangSC-Light.otf",
+      "sha256": "bdd6e2bc0ef1eca5a38995f01dd31f2e54f804f8dbb0b36318f1124e648eccc7",
+      "bytes": 13327588
+    },
+    {
+      "path": "outputs/Mac前端还原包/references/music-dark.json",
+      "sha256": "47ec31ebacd7dcbc111e06901d3a745e88da04b954e233fe5384fa93079d3f23",
+      "bytes": 362
+    },
+    {
+      "path": "outputs/Mac前端还原包/references/music-dark.png",
+      "sha256": "711a479cf446e480936c6b25b1b18cf89814c61faabcb43a344ba4afab0c9505",
+      "bytes": 228179,
+      "pngWidth": 452,
+      "pngHeight": 682
+    },
+    {
+      "path": "outputs/Mac前端还原包/references/music-light.json",
+      "sha256": "ade5b5cd002038c995274756aa03d90ccc3eb6d58e0d58144098afde21ff6863",
+      "bytes": 364
+    },
+    {
+      "path": "outputs/Mac前端还原包/references/music-light.png",
+      "sha256": "55810dab61bb04669a5dbf1acf4d231295a233261dc59fde2eac69bd6c4aab55",
+      "bytes": 162392,
+      "pngWidth": 452,
+      "pngHeight": 682
+    },
+    {
+      "path": "outputs/Mac前端还原包/references/settings-dark.json",
+      "sha256": "ea2d0afb51b085b001789d55ba2fe4d55e64c28cd500dde887947b7751df29a2",
+      "bytes": 368
+    },
+    {
+      "path": "outputs/Mac前端还原包/references/settings-dark.png",
+      "sha256": "51d1a130ac2012406e1c168e1d385799563e9b8d5870178f7ac9a7e3ce6b83d8",
+      "bytes": 223470,
+      "pngWidth": 592,
+      "pngHeight": 682
+    },
+    {
+      "path": "outputs/Mac前端还原包/references/settings-light.json",
+      "sha256": "ddcc3e50ec084fccc8d84b42944b887fbcb82cbd3a83de2a3175f9557790b678",
+      "bytes": 370
+    },
+    {
+      "path": "outputs/Mac前端还原包/references/settings-light.png",
+      "sha256": "902792b683454ca9c96a126a12b471e360c3782ed7a91a816583677b9719dc1e",
+      "bytes": 142393,
+      "pngWidth": 592,
+      "pngHeight": 682
+    },
+    {
+      "path": "outputs/Mac前端还原包/references/weather-alerts-light.json",
+      "sha256": "51aa45df509bb800e79221912f9f85fbcc130d20dafad5dd30b9b1a95afa7bd4",
+      "bytes": 370
+    },
+    {
+      "path": "outputs/Mac前端还原包/references/weather-alerts-light.png",
+      "sha256": "0003bc8217c35dbfcf3064fdc1b0285e36c8d2ce0c10b672ccae1f96d43f0695",
+      "bytes": 201253,
+      "pngWidth": 512,
+      "pngHeight": 742
+    },
+    {
+      "path": "outputs/Mac前端还原包/references/weather-capsule-dark.json",
+      "sha256": "6c298e5e643c8f70c57e44268c3a63d68652ad22da203dc9072a344d65d2ceb6",
+      "bytes": 382
+    },
+    {
+      "path": "outputs/Mac前端还原包/references/weather-capsule-dark.png",
+      "sha256": "c77bcee78665939918f029f3f7b3365db850882ca89ad10713ef20520ced9c36",
+      "bytes": 9545,
+      "pngWidth": 124,
+      "pngHeight": 54
+    },
+    {
+      "path": "outputs/Mac前端还原包/references/weather-capsule-light.json",
+      "sha256": "447d331b5e6ab730c18dd96705ad19b4a4d7eb096c95bb9a06bd07780eb5691d",
+      "bytes": 384
+    },
+    {
+      "path": "outputs/Mac前端还原包/references/weather-capsule-light.png",
+      "sha256": "f9bf4bc721f811b3a09291752be682284e95ca24aa7283e1b8c0bf048481eedf",
+      "bytes": 6916,
+      "pngWidth": 124,
+      "pngHeight": 54
+    },
+    {
+      "path": "outputs/Mac前端还原包/references/weather-dark.json",
+      "sha256": "e37129073b70a29c5b712c0562ce669e8c67c9f5214d927692117408afca5653",
+      "bytes": 354
+    },
+    {
+      "path": "outputs/Mac前端还原包/references/weather-dark.png",
+      "sha256": "29476a7b742c7675246903cf5c00156dec59b9494d1f92c53e703540b3a52b5b",
+      "bytes": 300139,
+      "pngWidth": 512,
+      "pngHeight": 742
+    },
+    {
+      "path": "outputs/Mac前端还原包/references/weather-hover-dark.json",
+      "sha256": "0c2b0a0639e671c997795e603c46884246923e9705b2a546da51182c6624effe",
+      "bytes": 366
+    },
+    {
+      "path": "outputs/Mac前端还原包/references/weather-hover-dark.png",
+      "sha256": "867ee7167930a63871ace74df256141e9b37208172a1ee040a021c6906961b5c",
+      "bytes": 43373,
+      "pngWidth": 296,
+      "pngHeight": 192
+    },
+    {
+      "path": "outputs/Mac前端还原包/references/weather-hover-light.json",
+      "sha256": "e7df07caada652962a9c97326d408455d2c9408289a40a5002c29f3612317c5d",
+      "bytes": 368
+    },
+    {
+      "path": "outputs/Mac前端还原包/references/weather-hover-light.png",
+      "sha256": "94cee548e0b3d909df7eb4a5a5abfa0f09cacbe7530c787b40d9b45132fae29c",
+      "bytes": 31199,
+      "pngWidth": 296,
+      "pngHeight": 192
+    },
+    {
+      "path": "outputs/Mac前端还原包/references/weather-light.json",
+      "sha256": "09786110f3b32c86d6080cb2556037e8773f5b8ed1dc4c1bb909393e7c0b44c9",
+      "bytes": 356
+    },
+    {
+      "path": "outputs/Mac前端还原包/references/weather-light.png",
+      "sha256": "99b295bffbb587231e30d3b9c2b4f9ca07cc27973d6c9ab9f8dafddc82c64fb8",
+      "bytes": 192674,
+      "pngWidth": 512,
+      "pngHeight": 742
+    },
+    {
+      "path": "outputs/Mac前端还原包/references/weather-lite-dark.json",
+      "sha256": "d037d203e3437b0d233520eb217a8d1f5b3289f515c730f129dfc5720dfba8eb",
+      "bytes": 376
+    },
+    {
+      "path": "outputs/Mac前端还原包/references/weather-lite-dark.png",
+      "sha256": "f89a36a4d103fca7641a544469fd0015f2df2fce48d5033b4882dd306ae1f703",
+      "bytes": 6844,
+      "pngWidth": 85,
+      "pngHeight": 54
+    },
+    {
+      "path": "outputs/Mac前端还原包/references/weather-lite-light.json",
+      "sha256": "7c420949c3f84795cc38e3e33427033195f55120a6fad96ff771847ee0d8b719",
+      "bytes": 378
+    },
+    {
+      "path": "outputs/Mac前端还原包/references/weather-lite-light.png",
+      "sha256": "28619e61deaf9053419c1e8f0a5972061b4945a9454620fdbdc9a7348be7e553",
+      "bytes": 4833,
+      "pngWidth": 85,
+      "pngHeight": 54
+    },
+    {
+      "path": "outputs/Mac前端还原包/references/weather-wide-light.json",
+      "sha256": "1f74eee8dc4bd26d4b41efc9b50d740dc2fa404b8a5fcac5cd73ca60820b263a",
+      "bytes": 379
+    },
+    {
+      "path": "outputs/Mac前端还原包/references/weather-wide-light.png",
+      "sha256": "3f3b59a8c5d636750027042d00123ba5a129098e580352e79857149c4a1c08fe",
+      "bytes": 7969,
+      "pngWidth": 146,
+      "pngHeight": 54
+    },
+    {
+      "path": "outputs/Mac前端还原包/fixtures/reference-cover.png",
+      "sha256": "251c6b5f68062566a5db773f17683066b7b51a8621550dd95af2b5d4b91f7510",
+      "bytes": 19716,
+      "pngWidth": 256,
+      "pngHeight": 256
+    }
+  ],
+  "auditedMacCommit": "35f9f23f337bc4835bcd3a3e2729157cb63dcef1",
+  "unverifiedHere": [
+    "new macOS build/render",
+    "runtime motion on macOS",
+    "ten-day expand/collapse visual state"
+  ]
+}

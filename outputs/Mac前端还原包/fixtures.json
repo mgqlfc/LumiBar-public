@@ -1,0 +1,370 @@
+{
+  "schemaVersion": 1,
+  "dataKind": "synthetic UI reference",
+  "clock": {
+    "date": "2026-11-19",
+    "hourlyStart": "12:00",
+    "updatedLabel": "上次更新：12:00"
+  },
+  "city": {
+    "name": "武清区",
+    "region": "天津市",
+    "favorites": [
+      "奎文区",
+      "北京市"
+    ],
+    "located": true
+  },
+  "weather": {
+    "temperature": 8,
+    "feelsLike": 5,
+    "code": 3,
+    "isDay": true,
+    "condition": "阴",
+    "rainProbabilityPercent": 20,
+    "relativeHumidityPercent": 66,
+    "windKmh": 14.1,
+    "windDegrees": 45,
+    "windDirection": "东北风",
+    "aqi": 83,
+    "aqiStandard": "CN AQI",
+    "aqiCategory": "良",
+    "pressureHpa": 1026,
+    "uvi": 1.6,
+    "sourceLabel": "和风天气",
+    "hourly": [
+      {
+        "hoursFromStart": 0,
+        "temperature": 8.0,
+        "code": 61,
+        "rainProbabilityPercent": 20
+      },
+      {
+        "hoursFromStart": 1,
+        "temperature": 8.596007992385184,
+        "code": 3,
+        "rainProbabilityPercent": 20
+      },
+      {
+        "hoursFromStart": 2,
+        "temperature": 9.168255026925952,
+        "code": 3,
+        "rainProbabilityPercent": 20
+      },
+      {
+        "hoursFromStart": 3,
+        "temperature": 9.693927420185107,
+        "code": 3,
+        "rainProbabilityPercent": 20
+      },
+      {
+        "hoursFromStart": 4,
+        "temperature": 10.152068272698568,
+        "code": 61,
+        "rainProbabilityPercent": 20
+      },
+      {
+        "hoursFromStart": 5,
+        "temperature": 10.524412954423688,
+        "code": 3,
+        "rainProbabilityPercent": 20
+      },
+      {
+        "hoursFromStart": 6,
+        "temperature": 10.79611725790168,
+        "code": 3,
+        "rainProbabilityPercent": 20
+      },
+      {
+        "hoursFromStart": 7,
+        "temperature": 10.95634918996538,
+        "code": 3,
+        "rainProbabilityPercent": 20
+      },
+      {
+        "hoursFromStart": 8,
+        "temperature": 10.998720809124515,
+        "code": 61,
+        "rainProbabilityPercent": 20
+      },
+      {
+        "hoursFromStart": 9,
+        "temperature": 10.921542892634585,
+        "code": 3,
+        "rainProbabilityPercent": 20
+      },
+      {
+        "hoursFromStart": 10,
+        "temperature": 10.727892280477045,
+        "code": 3,
+        "rainProbabilityPercent": 20
+      },
+      {
+        "hoursFromStart": 11,
+        "temperature": 10.425489211458771,
+        "code": 3,
+        "rainProbabilityPercent": 20
+      },
+      {
+        "hoursFromStart": 12,
+        "temperature": 10.026389541653453,
+        "code": 61,
+        "rainProbabilityPercent": 20
+      },
+      {
+        "hoursFromStart": 13,
+        "temperature": 9.546504115464392,
+        "code": 3,
+        "rainProbabilityPercent": 20
+      },
+      {
+        "hoursFromStart": 14,
+        "temperature": 9.004964450467716,
+        "code": 3,
+        "rainProbabilityPercent": 20
+      },
+      {
+        "hoursFromStart": 15,
+        "temperature": 8.423360024179601,
+        "code": 3,
+        "rainProbabilityPercent": 20
+      },
+      {
+        "hoursFromStart": 16,
+        "temperature": 7.82487756971726,
+        "code": 61,
+        "rainProbabilityPercent": 20
+      },
+      {
+        "hoursFromStart": 17,
+        "temperature": 7.2333766939195066,
+        "code": 3,
+        "rainProbabilityPercent": 20
+      },
+      {
+        "hoursFromStart": 18,
+        "temperature": 6.672438670115443,
+        "code": 3,
+        "rainProbabilityPercent": 20
+      },
+      {
+        "hoursFromStart": 19,
+        "temperature": 6.164426327171843,
+        "code": 3,
+        "rainProbabilityPercent": 20
+      },
+      {
+        "hoursFromStart": 20,
+        "temperature": 5.729592514076216,
+        "code": 61,
+        "rainProbabilityPercent": 20
+      },
+      {
+        "hoursFromStart": 21,
+        "temperature": 5.385272682759235,
+        "code": 3,
+        "rainProbabilityPercent": 20
+      },
+      {
+        "hoursFromStart": 22,
+        "temperature": 5.145193778331452,
+        "code": 3,
+        "rainProbabilityPercent": 20
+      },
+      {
+        "hoursFromStart": 23,
+        "temperature": 5.018926989099606,
+        "code": 3,
+        "rainProbabilityPercent": 20
+      }
+    ],
+    "daily": [
+      {
+        "daysFromStart": 0,
+        "min": 3.0,
+        "max": 12.0,
+        "code": 61,
+        "rainProbabilityPercent": 20
+      },
+      {
+        "daysFromStart": 1,
+        "min": 2.8,
+        "max": 11.7,
+        "code": 3,
+        "rainProbabilityPercent": 20
+      },
+      {
+        "daysFromStart": 2,
+        "min": 2.6,
+        "max": 11.4,
+        "code": 3,
+        "rainProbabilityPercent": 20
+      },
+      {
+        "daysFromStart": 3,
+        "min": 2.4,
+        "max": 11.1,
+        "code": 61,
+        "rainProbabilityPercent": 20
+      },
+      {
+        "daysFromStart": 4,
+        "min": 2.2,
+        "max": 10.8,
+        "code": 3,
+        "rainProbabilityPercent": 20
+      },
+      {
+        "daysFromStart": 5,
+        "min": 2.0,
+        "max": 10.5,
+        "code": 3,
+        "rainProbabilityPercent": 20
+      },
+      {
+        "daysFromStart": 6,
+        "min": 1.7999999999999998,
+        "max": 10.2,
+        "code": 61,
+        "rainProbabilityPercent": 20
+      },
+      {
+        "daysFromStart": 7,
+        "min": 1.5999999999999999,
+        "max": 9.9,
+        "code": 3,
+        "rainProbabilityPercent": 20
+      },
+      {
+        "daysFromStart": 8,
+        "min": 1.4,
+        "max": 9.6,
+        "code": 3,
+        "rainProbabilityPercent": 20
+      },
+      {
+        "daysFromStart": 9,
+        "min": 1.2,
+        "max": 9.3,
+        "code": 61,
+        "rainProbabilityPercent": 20
+      }
+    ],
+    "precipitation15MinAmountMm": [
+      0,
+      0.1,
+      0.3,
+      0.1
+    ],
+    "precipitationNotice": "model trend; do not relabel as minute radar prediction"
+  },
+  "wideWeather": {
+    "temperature": -20,
+    "feelsLike": -24,
+    "rainProbabilityPercent": 100
+  },
+  "alerts": [
+    {
+      "event": "大风",
+      "level": "yellow"
+    },
+    {
+      "event": "海上大风",
+      "level": "blue"
+    }
+  ],
+  "media": {
+    "title": "City Lights · Reference Session",
+    "artist": "LumiBar Ensemble",
+    "album": "Through the Glass",
+    "playerLabel": "Spotify",
+    "lyricsLabelInCapture": "歌词",
+    "playing": true,
+    "positionSeconds": 36,
+    "durationSeconds": 222,
+    "coverPath": "fixtures/reference-cover.png",
+    "accent": "#71B6D7",
+    "secondaryAccent": "#AE9BD2",
+    "lyrics": [
+      {
+        "seconds": 0,
+        "text": "在街灯之间，慢慢走远"
+      },
+      {
+        "seconds": 8,
+        "text": "The city leaves a light for us"
+      },
+      {
+        "seconds": 16,
+        "text": "晚风穿过透明的窗"
+      },
+      {
+        "seconds": 24,
+        "text": "We keep a little room for dawn"
+      },
+      {
+        "seconds": 32,
+        "text": "让这一刻，停在微光里"
+      },
+      {
+        "seconds": 40,
+        "text": "A quieter song beneath the sky"
+      },
+      {
+        "seconds": 48,
+        "text": "沿着熟悉的街道回去"
+      },
+      {
+        "seconds": 56,
+        "text": "And every window starts to glow"
+      },
+      {
+        "seconds": 64,
+        "text": "留一点光，等下个晴天"
+      },
+      {
+        "seconds": 72,
+        "text": "The morning finds its way to you"
+      },
+      {
+        "seconds": 80,
+        "text": "把喜欢的歌留在此刻"
+      },
+      {
+        "seconds": 88,
+        "text": "We carry all the colors home"
+      }
+    ],
+    "activeLyricIndex": 4,
+    "spectrum": [
+      0.18,
+      0.32,
+      0.52,
+      0.68,
+      0.47,
+      0.36,
+      0.42,
+      0.56,
+      0.44,
+      0.31,
+      0.26,
+      0.34,
+      0.28,
+      0.22,
+      0.17,
+      0.24,
+      0.19,
+      0.12,
+      0.08,
+      0.04
+    ]
+  },
+  "capture": {
+    "glassDensity": 0.5,
+    "glow": 0.26,
+    "saturation": 0.8,
+    "lyricsFontSize": 22,
+    "animations": false,
+    "playerTransportConnected": false
+  }
+}
