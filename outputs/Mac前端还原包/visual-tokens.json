@@ -1,0 +1,414 @@
+{
+  "schemaVersion": 1,
+  "baseline": {
+    "windowsVersion": "0.7.56",
+    "date": "2026-11-19",
+    "frontend": "builtin WinUI 3",
+    "units": "DIP; start with equal macOS points",
+    "authority": "current source + real reference PNGs"
+  },
+  "fonts": {
+    "western": "Geist",
+    "chinese": "PingFang SC",
+    "separateSettings": true,
+    "avoidRoundedNumerals": true
+  },
+  "defaults": {
+    "Glow": 0.26,
+    "CoverSaturation": 0.8,
+    "AutoLocateCity": true,
+    "GlassOpacity": 0.5,
+    "Theme": "System",
+    "AccentColor": "blue",
+    "FontFamily": null,
+    "ChineseFontFamily": null,
+    "WesternFontFamily": null,
+    "CoverGlow": true,
+    "Animations": true,
+    "ShowWeather": true,
+    "ShowMusic": true,
+    "Spectrum": true,
+    "HideInFullscreen": true,
+    "AutoLyrics": true,
+    "AutoStart": true,
+    "CloseToTray": true,
+    "WeatherRefreshMinutes": 20,
+    "WeatherProvider": "Auto",
+    "WeatherProxyUrl": "https://124.156.224.125/lumibar-weather/",
+    "Fahrenheit": false,
+    "WindMetersPerSecond": false,
+    "Gap": 4,
+    "MusicWidth": 238,
+    "LyricsFontSize": 22,
+    "Sensitivity": 1.2
+  },
+  "surface": {
+    "cornerRadius": 12,
+    "shadowGutter": 16,
+    "lightFallback": "#F7F9FD",
+    "darkFallback": "#181B23",
+    "referenceBackdropLight": "#F3F5FA",
+    "referenceBackdropDark": "#171922"
+  },
+  "capsule": {
+    "height": 34,
+    "radius": 17,
+    "outerGutter": 10,
+    "outerHeight": 54,
+    "weatherMinWidth": 104,
+    "weatherLiteMinWidth": 64,
+    "musicFullWidth": 238,
+    "musicLiteWidth": 48,
+    "normalWeatherIcon": 24,
+    "liteWeatherIcon": 22,
+    "temperatureFont": 15,
+    "temperatureWeight": 600,
+    "rainIcon": 14,
+    "rainFont": 11,
+    "rainOpacity": 0.85,
+    "normalGap": 4,
+    "liteGap": 3,
+    "rainIconToNumberGap": 2,
+    "widthPolicy": "measure actual glyphs; include minus sign, degree, percent and font changes"
+  },
+  "weatherHover": {
+    "width": 264,
+    "height": 160,
+    "padding": [
+      14.5,
+      16,
+      17.5,
+      16
+    ],
+    "headerHeight": 40,
+    "headerIcon": 30,
+    "headerCityFont": 15,
+    "headerConditionFont": 11,
+    "headerTemperatureFont": 24,
+    "metricColumns": 3,
+    "metricColumnGap": 10,
+    "metricRowHeights": [
+      18,
+      31,
+      17
+    ],
+    "metricRowGap": 3,
+    "metricTitleFont": 11,
+    "metricValueFont": 22,
+    "metricNoteFont": 10,
+    "metricValueWeight": 600
+  },
+  "weatherDetail": {
+    "width": 480,
+    "height": "content-driven; bounded by usable screen",
+    "padding": [
+      22,
+      16,
+      22,
+      16
+    ],
+    "sectionGap": 8,
+    "cityFont": 24,
+    "metadataFont": 11,
+    "currentIcon": 68,
+    "currentTemperatureFont": 52,
+    "currentColumnsGap": 12,
+    "temperatureSummaryOrder": [
+      "min",
+      "max",
+      "feelsLike"
+    ],
+    "hourlySampleColumns": 8,
+    "dailyPreviewRows": 4,
+    "dailyColumnWidths": [
+      112,
+      32,
+      58,
+      "star",
+      36
+    ],
+    "dailyColumnGap": 10,
+    "dailyRowMinHeight": 28,
+    "dailyBarHeight": 5,
+    "summaryColumns": 5,
+    "summaryColumnGap": 12,
+    "summaryTitleFont": 10,
+    "summaryValueFont": 16,
+    "summaryDirectionFont": 10,
+    "summaryOrder": [
+      "relativeHumidity",
+      "wind",
+      "airQuality",
+      "pressure",
+      "uvIndex"
+    ]
+  },
+  "musicDetail": {
+    "width": 420,
+    "height": 650,
+    "padding": [
+      22,
+      14,
+      22,
+      16
+    ],
+    "cover": 58,
+    "coverRadius": 11,
+    "titleFont": 19,
+    "artistFont": 13,
+    "albumFont": 11,
+    "playButton": 42,
+    "layersBackToFront": [
+      "glass",
+      "albumLight",
+      "lyrics",
+      "spectrum",
+      "sourceAndControls"
+    ]
+  },
+  "lyrics": {
+    "defaultFont": 22,
+    "allRowsSameFontSize": true,
+    "weight": 600,
+    "spacingFormula": "clamp(size*.5,9,18)",
+    "stepFormula": "size*1.3+spacing",
+    "rowsFormula": "size<=21 ? 6 : size<=29 ? 5 : 4",
+    "baselineViewportFormula": "clamp(step*rows+120,312,392)",
+    "topExtensionSteps": 0.5,
+    "bottomExtensionSteps": 1.5,
+    "focusTopFormula": "clamp(step+48,80,128)+topExtension",
+    "focusFadeSafetyDip": 8,
+    "focusOpacity": 1,
+    "nearbyOpacity": 0.62,
+    "farOpacity": 0.3,
+    "normalOpacityWhenUntimed": 0.78,
+    "focusFont22": {
+      "spacing": 11,
+      "step": 39.6,
+      "topExtension": 19.8,
+      "bottomExtension": 59.4,
+      "viewport": 397.2,
+      "focusTop": 107.4
+    },
+    "offsetStepSeconds": 0.5,
+    "offsetScope": "track"
+  },
+  "marquee": {
+    "edgeStops": [
+      0,
+      0.05,
+      0.95,
+      1
+    ],
+    "edgeAlpha": [
+      0,
+      1,
+      1,
+      0
+    ],
+    "pauseSeconds": 1.8,
+    "speedDipPerSecond": 22,
+    "minTravelSeconds": 1,
+    "reservedWidthTransitionMs": 260,
+    "disabledMotionFallback": "ellipsis"
+  },
+  "settings": {
+    "width": 560,
+    "height": 650,
+    "headerHeight": 54,
+    "accentOptions": {
+      "blue": {
+        "name": "冰糖蓝",
+        "colors": [
+          "#6CE7DA",
+          "#21BEC2",
+          "#118FB1"
+        ],
+        "lightInk": "#006C80",
+        "darkInk": "#70E8DA"
+      },
+      "mint": {
+        "name": "薄荷绿",
+        "colors": [
+          "#BAF0D6",
+          "#6BCDAA",
+          "#399F8C"
+        ],
+        "lightInk": "#176D5D",
+        "darkInk": "#9BE2C4"
+      },
+      "lime": {
+        "name": "青柠糖",
+        "colors": [
+          "#E0EEB3",
+          "#B4CF82",
+          "#7DA56C"
+        ],
+        "lightInk": "#506C2B",
+        "darkInk": "#D0E5A4"
+      },
+      "butter": {
+        "name": "奶油黄",
+        "colors": [
+          "#FFF1B6",
+          "#F0D47A",
+          "#D0B365"
+        ],
+        "lightInk": "#786117",
+        "darkInk": "#F6DF97"
+      },
+      "apricot": {
+        "name": "奶杏橙",
+        "colors": [
+          "#FFE0BB",
+          "#F2BA91",
+          "#D99579"
+        ],
+        "lightInk": "#985235",
+        "darkInk": "#F7CCA5"
+      },
+      "peach": {
+        "name": "蜜桃粉",
+        "colors": [
+          "#FFD3DF",
+          "#F0ACC9",
+          "#D48EB6"
+        ],
+        "lightInk": "#91446C",
+        "darkInk": "#F6BDD5"
+      },
+      "berry": {
+        "name": "莓果红",
+        "colors": [
+          "#FFD0CE",
+          "#EF9EA9",
+          "#D17F9C"
+        ],
+        "lightInk": "#973D5A",
+        "darkInk": "#F4B4BF"
+      },
+      "lavender": {
+        "name": "薰衣紫",
+        "colors": [
+          "#E5D5FF",
+          "#C6ACEF",
+          "#A58BDA"
+        ],
+        "lightInk": "#6B4DA0",
+        "darkInk": "#D7C0F7"
+      },
+      "periwinkle": {
+        "name": "绣球蓝",
+        "colors": [
+          "#D2E3FF",
+          "#A9C4F3",
+          "#86A5DE"
+        ],
+        "lightInk": "#435D99",
+        "darkInk": "#BED3F8"
+      }
+    }
+  },
+  "temperatureGradient": [
+    "#4799FF",
+    "#A497DA",
+    "#FFA54F"
+  ],
+  "weatherLightPairs": {
+    "haze": [
+      "#B4A47E",
+      "#97A2A5"
+    ],
+    "dustStorm": [
+      "#E0A957",
+      "#B77D45"
+    ],
+    "thunderstorm": [
+      "#A579EA",
+      "#5790EE"
+    ],
+    "snow": [
+      "#7DD3EE",
+      "#ABB8EA"
+    ],
+    "fog": [
+      "#8EB8CF",
+      "#97BFD0"
+    ],
+    "rain": [
+      "#41B5EF",
+      "#4886DB"
+    ],
+    "overcast": [
+      "#88BADD",
+      "#7CA7CB"
+    ],
+    "partlyCloudyDay": [
+      "#FACA71",
+      "#97CAE1"
+    ],
+    "clearNight": [
+      "#557DF4",
+      "#938BEB"
+    ],
+    "clearDay": [
+      "#FFCA5B",
+      "#FFAD4E"
+    ]
+  },
+  "weatherAtlas": {
+    "path": "work/LumiBar/Assets/weather-icons-clean.png",
+    "columns": 4,
+    "rows": 4,
+    "indices": {
+      "clearDay": 0,
+      "clearNight": 1,
+      "partlyCloudyDay": 2,
+      "partlyCloudyNight": 3,
+      "unknown": 4,
+      "overcast": 5,
+      "rain": 6,
+      "heavyRain": 7,
+      "snow": 9,
+      "freezingRain": 10,
+      "thunderstorm": 11,
+      "fogAndHaze": 12,
+      "dustStorm": 13
+    },
+    "iconsHaveBakedGlow": false
+  },
+  "motionMs": {
+    "hoverOpenDelay": 320,
+    "hoverLeaveGrace": 350,
+    "hoverExit": 120,
+    "detailExit": 180,
+    "revealExpand": 280,
+    "revealCollapse": 220,
+    "revealContentEnter": 200,
+    "revealContentExit": 140,
+    "lyricFollow": 680,
+    "lyricOpacity": 520,
+    "capsuleMove": 220,
+    "windowResize": 320
+  },
+  "albumLightPeriodsSeconds": [
+    17,
+    21
+  ],
+  "glassWindowsReference": {
+    "kind": "Thin",
+    "materialMinimum": 0.35,
+    "lightTint": "#FFFFFF",
+    "lightTintOpacity": 0.492,
+    "lightLuminosityOpacity": 0.2375,
+    "darkTint": "#1E2B44",
+    "darkTintOpacity": 0.24,
+    "darkLuminosityOpacity": 0.4575,
+    "washFormula": "slope*(density-.35)/(1-baseline)",
+    "lightWashBaseline": 0.492,
+    "lightWashSlope": 0.32,
+    "darkWashBaseline": 0.4575,
+    "darkWashSlope": 0.45,
+    "porting": "match visual result on the reference backdrop, not Windows API constants"
+  }
+}

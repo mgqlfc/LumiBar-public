@@ -25,6 +25,7 @@
 !/outputs/Antigravity前端接入包/
 !/outputs/和风天气服务器接入包/
 !/outputs/concepts/
+!/outputs/Mac前端还原包/
 
 # Build output and machine-local state.
 **/bin/
