@@ -153,6 +153,7 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
             weatherPanel.appearance = appearance.windowAppearance
             expandedPanel.appearance = appearance.windowAppearance
             settings?.appearance = appearance.windowAppearance
+            musicStatus.button?.appearance = appearance.windowAppearance
             updateStatus()
         }
         music.onTrackChange = { [weak self] in self?.layoutMusic() }
@@ -443,6 +444,7 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
     @objc private func screensChanged() {
         weatherPanel.orderOut(nil)
         weatherPinned = false
+        updateStatus()
         layoutMusic()
     }
 
