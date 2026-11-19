@@ -87,6 +87,18 @@ struct Weather: Codable {
     let aqiStandard: String?
     let conditionText: String?
     let attributions: [String]?
+    var providerNote: [String]? = nil
+    var aqiCategory: String? = nil
+
+    var aqiCaption: String {
+        guard let aqi else { return "暂无数据" }
+        if let aqiCategory, !aqiCategory.isEmpty { return aqiCategory }
+        if aqi <= 50 { return "优" }
+        if aqi <= 100 { return aqiStandard == "CN AQI" ? "良" : "中等" }
+        if aqi <= 150 { return aqiStandard == "CN AQI" ? "轻度污染" : "敏感人群" }
+        if aqi <= 200 { return aqiStandard == "CN AQI" ? "中度污染" : "不健康" }
+        return aqiStandard == "CN AQI" ? (aqi <= 300 ? "重度污染" : "严重污染") : "很不健康"
+    }
 
     var currentAlerts: [Alert] {
         let now = Date.now
@@ -123,7 +135,36 @@ struct Weather: Codable {
 enum WeatherAPI {
     static let defaultProxy = "https://124.156.224.125/lumibar-weather/"
     private struct ProxyResponse: Decodable { let forecast: Weather }
-    private struct CityResponse: Decodable { let results: [City]? }
+    private struct CityResponse: Decodable {
+        struct Match: Decodable {
+            let name: String
+            let latitude: Double
+            let longitude: Double
+            let timezone: String?
+            let admin1: String?
+            let country: String?
+            var city: City {
+                City(name: name, latitude: latitude, longitude: longitude,
+                     region: [admin1, country].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "),
+                     timezone: timezone)
+            }
+        }
+        let results: [Match]?
+    }
+
+    private struct District: Decodable {
+        let name: String?
+        let lat: String
+        let lon: String
+        let display_name: String?
+        let address: [String: String]?
+        var city: City? {
+            guard let name, !name.isEmpty, let latitude = Double(lat), let longitude = Double(lon),
+                  (-90...90).contains(latitude), (-180...180).contains(longitude) else { return nil }
+            return .init(name: name, latitude: latitude, longitude: longitude, region: display_name,
+                         timezone: address?["country_code"] == "cn" ? "Asia/Shanghai" : nil)
+        }
+    }
     private static let session: URLSession = {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = 12
@@ -148,9 +189,12 @@ enum WeatherAPI {
         var parts = URLComponents(string: "https://geocoding-api.open-meteo.com/v1/search")!
         parts.queryItems = [URLQueryItem(name: "name", value: term),
                             URLQueryItem(name: "count", value: "12"),
-                            URLQueryItem(name: "language", value: "zh")]
+                            URLQueryItem(name: "language", value: "zh"),
+                            URLQueryItem(name: "format", value: "json")]
         if let matches = try? JSONDecoder().decode(CityResponse.self, from: await get(parts.url!)).results,
-           !matches.isEmpty { return matches }
+           !matches.isEmpty { return matches.map(\.city).uniqued() }
+        try Task.checkCancellation()
+        if let districts = try? await searchDistricts(term), !districts.isEmpty { return districts }
         try Task.checkCancellation()
         let request = MKLocalSearch.Request()
         request.naturalLanguageQuery = term
@@ -162,6 +206,40 @@ enum WeatherAPI {
             return City(name: name, latitude: coordinate.latitude, longitude: coordinate.longitude,
                         region: item.address?.shortAddress)
         }.uniqued()
+    }
+
+    private static func searchDistricts(_ term: String) async throws -> [City] {
+        var endpoint = URLComponents(string: "https://nominatim.openstreetmap.org/search")!
+        endpoint.queryItems = [.init(name: "q", value: term), .init(name: "format", value: "jsonv2"),
+                               .init(name: "limit", value: "6"), .init(name: "addressdetails", value: "1"),
+                               .init(name: "accept-language", value: "zh-CN")]
+        let cities = try JSONDecoder().decode([District].self, from: await get(endpoint.url!))
+        return cities.compactMap(\.city).uniqued()
+    }
+
+    static func district(for location: CLLocation) async -> City? {
+        let coordinate = location.coordinate
+        var endpoint = URLComponents(string: "https://nominatim.openstreetmap.org/reverse")!
+        endpoint.queryItems = [
+            .init(name: "lat", value: String(coordinate.latitude)), .init(name: "lon", value: String(coordinate.longitude)),
+            .init(name: "format", value: "jsonv2"), .init(name: "zoom", value: "10"),
+            .init(name: "addressdetails", value: "1"), .init(name: "accept-language", value: "zh-CN")
+        ]
+        if let data = try? await get(endpoint.url!), let place = try? JSONDecoder().decode(District.self, from: data),
+           let address = place.address {
+            let name = ["city_district", "town", "city", "county", "village", "suburb"]
+                .compactMap { address[$0] }.first { !$0.isEmpty } ?? "当前位置"
+            var seen = Set([name])
+            let region = ["state", "city", "country"].compactMap { address[$0] }
+                .filter { !$0.isEmpty && seen.insert($0).inserted }.joined(separator: " · ")
+            return City(name: name, latitude: coordinate.latitude, longitude: coordinate.longitude,
+                        region: region, timezone: address["country_code"] == "cn" ? "Asia/Shanghai" : nil)
+        }
+        guard !Task.isCancelled else { return nil }
+        let request = MKReverseGeocodingRequest(location: location)
+        let item = (try? await request?.mapItems)?.first
+        let name = item?.addressRepresentations?.cityName ?? item?.name ?? "当前位置"
+        return City(name: name, latitude: coordinate.latitude, longitude: coordinate.longitude, region: nil)
     }
 
     static func forecast(_ city: City, proxy: String) async throws -> Weather {
@@ -190,7 +268,7 @@ enum WeatherAPI {
         weather.queryItems = coordinates(city) + [
             .init(name: "current", value: currentFields), .init(name: "hourly", value: hourlyFields),
             .init(name: "daily", value: dailyFields), .init(name: "timezone", value: "auto"),
-            .init(name: "forecast_days", value: "7"), .init(name: "minutely_15", value: "precipitation"),
+            .init(name: "forecast_days", value: "10"), .init(name: "minutely_15", value: "precipitation"),
             .init(name: "forecast_minutely_15", value: "12")]
         var air = URLComponents(string: "https://air-quality-api.open-meteo.com/v1/air-quality")!
         air.queryItems = coordinates(city) + [.init(name: "current", value: "us_aqi,pm2_5,pm10,uv_index")]
@@ -312,8 +390,9 @@ enum WeatherAPI {
 
     private static func coordinates(_ city: City, precision: Int = 4) -> [URLQueryItem] {
         let names = precision == 2 ? ("lat", "lon") : ("latitude", "longitude")
-        return [.init(name: names.0, value: String(format: "%.*f", precision, city.latitude)),
-                .init(name: names.1, value: String(format: "%.*f", precision, city.longitude))]
+        let locale = Locale(identifier: "en_US_POSIX")
+        return [.init(name: names.0, value: String(format: "%.*f", locale: locale, precision, city.latitude)),
+                .init(name: names.1, value: String(format: "%.*f", locale: locale, precision, city.longitude))]
     }
 
     private static func get(_ url: URL) async throws -> Data {

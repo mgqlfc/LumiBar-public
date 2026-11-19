@@ -1,6 +1,6 @@
 import AppKit
+import ApplicationServices
 import CoreLocation
-import MapKit
 import SwiftUI
 
 @MainActor
@@ -16,6 +16,16 @@ final class WeatherModel: NSObject, CLLocationManagerDelegate {
     var error: String?
     var locationError: String?
     var loading = false
+    var fahrenheit: Bool {
+        didSet { defaults.set(fahrenheit, forKey: "weather.fahrenheit"); onChange?() }
+    }
+    var windMetersPerSecond: Bool {
+        didSet { defaults.set(windMetersPerSecond, forKey: "weather.windMetersPerSecond") }
+    }
+    var locatedCity: City?
+    var usingLocation: Bool {
+        didSet { defaults.set(usingLocation, forKey: "weather.location.selected") }
+    }
     var city: City?
     var favorites: [City]
     var proxy: String {
@@ -28,9 +38,18 @@ final class WeatherModel: NSObject, CLLocationManagerDelegate {
 
     init(defaults: UserDefaults) {
         self.defaults = defaults
+        fahrenheit = defaults.bool(forKey: "weather.fahrenheit")
+        windMetersPerSecond = defaults.bool(forKey: "weather.windMetersPerSecond")
+        let wasLocated = defaults.bool(forKey: "weather.location.selected")
+        usingLocation = wasLocated
         let decoder = JSONDecoder()
-        city = defaults.data(forKey: "weather.city").flatMap { try? decoder.decode(City.self, from: $0) }
+        let savedCity = defaults.data(forKey: "weather.city").flatMap { try? decoder.decode(City.self, from: $0) }
+        city = savedCity
         favorites = defaults.data(forKey: "weather.favorites").flatMap { try? decoder.decode([City].self, from: $0) } ?? []
+        if wasLocated { locatedCity = savedCity }
+        if savedCity != nil {
+            weather = defaults.data(forKey: "weather.cached").flatMap { try? decoder.decode(Weather.self, from: $0) }
+        }
         proxy = defaults.string(forKey: "weather.proxy") ?? WeatherAPI.defaultProxy
         proxyEnabled = defaults.object(forKey: "weather.proxy.enabled") as? Bool ?? true
         super.init()
@@ -38,11 +57,30 @@ final class WeatherModel: NSObject, CLLocationManagerDelegate {
         locator.delegate = self
     }
 
-    func select(_ city: City) {
+    func temperature(_ celsius: Double) -> String {
+        let physical = fahrenheit ? celsius * 1.8 + 32 : celsius
+        let value = physical.rounded(.toNearestOrEven)
+        return (value == 0 ? "0" : value.formatted(.number.precision(.fractionLength(0)).grouping(.never))) + "°"
+    }
+
+    func saveAndSelect(_ city: City) {
+        if !favorites.contains(where: { $0.id == city.id }) {
+            favorites = Array((favorites + [city]).suffix(30))
+            defaults.set(try? JSONEncoder().encode(favorites), forKey: "weather.favorites")
+        }
+        select(city)
+    }
+
+    func select(_ city: City, automatic: Bool = false) {
+        if automatic { locatedCity = city }
+        usingLocation = automatic
         locationPending = false
         locationTask?.cancel()
         locationError = nil
-        if self.city?.id != city.id { weather = nil }
+        if self.city?.id != city.id {
+            weather = nil
+            defaults.removeObject(forKey: "weather.cached")
+        }
         self.city = city
         defaults.set(try? JSONEncoder().encode(city), forKey: "weather.city")
         refresh()
@@ -68,6 +106,7 @@ final class WeatherModel: NSObject, CLLocationManagerDelegate {
                 let result = try await WeatherAPI.forecast(city, proxy: proxyEnabled ? proxy : "")
                 try Task.checkCancellation()
                 weather = result
+                defaults.set(try? JSONEncoder().encode(result), forKey: "weather.cached")
             } catch {
                 guard !Task.isCancelled else { return }
                 self.error = "天气更新失败，请检查网络后重试。"
@@ -107,13 +146,8 @@ final class WeatherModel: NSObject, CLLocationManagerDelegate {
             locationPending = false
             locationTask?.cancel()
             locationTask = Task {
-                let request = MKReverseGeocodingRequest(location: location)
-                let results = try? await request?.mapItems
-                guard !Task.isCancelled else { return }
-                let item = results?.first
-                let coordinate = location.coordinate
-                select(City(name: item?.addressRepresentations?.cityName ?? item?.name ?? "当前位置",
-                            latitude: coordinate.latitude, longitude: coordinate.longitude, region: nil))
+                guard let city = await WeatherAPI.district(for: location), !Task.isCancelled else { return }
+                select(city, automatic: true)
             }
         }
     }
@@ -141,9 +175,17 @@ final class MusicModel {
     var artwork: NSImage?
     var colors = neutralCoverColors
     var lyrics: [Lyric] = []
+    var previewSpectrum: [Double]?
+    var lyricsProvider: String?
+    var lyricsCaption: String {
+        if lyricsLoading { return "查找歌词中" }
+        if lyrics.isEmpty { return "暂无歌词" }
+        return (lyricsProvider ?? "同步") + "歌词"
+    }
     var lyricsLoading = false
     var mode: Mode = .compact
     var automationError: String?
+    var neteaseStatus: String?
     var audioError: String?
     var onTrackChange: (() -> Void)?
     let spectrum = Spectrum()
@@ -201,10 +243,22 @@ final class MusicModel {
         automationError = nil
     }
 
+    func connectNetease() {
+        let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
+        if AXIsProcessTrustedWithOptions(options) {
+            neteaseStatus = "已授权。请在网易云音乐中播放一首歌。"
+        } else {
+            neteaseStatus = "请在「隐私与安全性 → 辅助功能」打开 LumiBar，再在网易云音乐中播放一首歌。"
+        }
+    }
+
     func control(_ command: PlaybackCommand) {
         guard let track, commandTask == nil else { return }
         commandTask = Task {
-            if case .failure(let error) = await PlayerBridge.control(command, player: track.player), error.denied {
+            if track.player == .netease {
+                let success = await NeteaseBridge.shared.control(command, pid: track.pid)
+                if !success { neteaseStatus = "网易云当前的播放控件不可用。请打开它的播放窗口后重试。" }
+            } else if case .failure(let error) = await PlayerBridge.control(command, player: track.player), error.denied {
                 automationError = "请在系统设置的「隐私与安全性 → 自动化」允许 LumiBar 控制\(track.player.name)。"
             }
             commandTask = nil
@@ -231,6 +285,7 @@ final class MusicModel {
                 let parsed = Lyric.parse(string)
                 guard !parsed.isEmpty else { return }
                 self.lyrics = parsed
+                self.lyricsProvider = "本地 LRC "
                 self.lyricsLoading = false
                 if let folder = Self.lyricFolder() {
                     try? Data(string.utf8).write(to: folder.appending(path: Self.lyricFilename(track)), options: .atomic)
@@ -244,6 +299,19 @@ final class MusicModel {
         var candidates: [Track] = []
         for player in Player.allCases where !deniedPlayers.contains(player) {
             guard let running = NSRunningApplication.runningApplications(withBundleIdentifier: player.rawValue).first else { continue }
+            if player == .netease {
+                if AXIsProcessTrusted() {
+                    if let netease = await NeteaseBridge.shared.read(pid: running.processIdentifier) {
+                        candidates.append(netease)
+                        neteaseStatus = nil
+                    } else if neteaseStatus == nil {
+                        neteaseStatus = "请打开网易云音乐的主窗口并播放一首歌。"
+                    }
+                } else if neteaseStatus == nil {
+                    neteaseStatus = "网易云音乐已打开。连接时需要允许辅助功能。"
+                }
+                continue
+            }
             let result = await PlayerBridge.read(player, pid: running.processIdentifier)
             guard !Task.isCancelled else { return }
             switch result {
@@ -257,7 +325,8 @@ final class MusicModel {
         }
         guard !Task.isCancelled, commandTask == nil else { return }
         let playing = candidates.filter(\.playing)
-        select(playing.first(where: { $0.player == track?.player }) ?? playing.first
+        select(playing.first(where: { $0.player == .netease })
+               ?? playing.first(where: { $0.player == track?.player }) ?? playing.first
                ?? candidates.first(where: { $0.player == track?.player }) ?? candidates.first)
     }
 
@@ -268,6 +337,7 @@ final class MusicModel {
             artwork = nil
             colors = neutralCoverColors
             lyrics = []
+            lyricsProvider = nil
             if next == nil { mode = .compact }
             loadMetadata()
         }
@@ -285,14 +355,15 @@ final class MusicModel {
             let local = Self.lyricFolder()?.appending(path: Self.lyricFilename(track))
             let cached = local.flatMap { try? String(contentsOf: $0, encoding: .utf8) }
             let shouldFetch = cached == nil && onlineLyrics
-            async let remote = shouldFetch ? Lyric.fetch(track) : []
+            async let remote = shouldFetch ? Lyric.fetch(track) : nil
             if let data = await cover, !Task.isCancelled, let image = NSImage(data: data) {
                 artwork = image
                 colors = coverColors(image)
             }
             let result = await remote
             guard !Task.isCancelled else { return }
-            lyrics = cached.map(Lyric.parse) ?? result
+            lyrics = cached.map(Lyric.parse) ?? result?.lines ?? []
+            lyricsProvider = cached == nil ? result?.provider : "本地 LRC "
             lyricsLoading = false
         }
     }

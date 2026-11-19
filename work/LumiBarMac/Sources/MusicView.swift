@@ -3,6 +3,7 @@ import SwiftUI
 struct MusicView: View {
     enum Surface { case leading, trailing, capsule, expanded }
     let model: MusicModel
+    let appearance: AppearanceModel
     let surface: Surface
     let toggle: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -17,11 +18,10 @@ struct MusicView: View {
                 compact { bars(width: 42) }
             case .capsule:
                 compact {
-                    HStack(spacing: 9) {
-                        cover(size: 22)
-                        Text(track.title).font(.caption.weight(.semibold)).lineLimit(1)
-                        bars(width: 36)
-                    }.padding(.horizontal, 8)
+                    HStack(spacing: 8) {
+                        cover(size: 27)
+                        trackNames(track, expanded: false)
+                    }.padding(.horizontal, 7)
                 }
             case .expanded:
                 if model.mode == .lyrics { lyricsPanel(track) }
@@ -37,9 +37,16 @@ struct MusicView: View {
         .buttonStyle(.plain)
         .foregroundStyle(.white)
         .background {
-            Capsule().fill(.black).overlay(alignment: .bottom) {
-                LinearGradient(colors: [model.colors[0].opacity(0.24), model.colors[1].opacity(0.10), .clear],
-                               startPoint: .bottomLeading, endPoint: .topTrailing).clipShape(Capsule())
+            let shape = Capsule()
+            if surface == .capsule {
+                shape.fill(Color(white: 0.10))
+                albumLight(shape, opacity: 0.57)
+                spectrumBars(height: 24, opacity: 0.41)
+                    .padding(.leading, 43).padding(.trailing, 7)
+                    .frame(maxHeight: .infinity, alignment: .bottom).clipShape(shape)
+            } else {
+                shape.fill(.black)
+                albumLight(shape, opacity: 0.36)
             }
         }
         .accessibilityLabel(model.mode == .lyrics ? "收起歌词" : "展开歌词")
@@ -58,12 +65,12 @@ struct MusicView: View {
         }
         .padding(12)
         .background {
-            RoundedRectangle(cornerRadius: 20).fill(Color(white: 0.048))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 20).fill(
-                        RadialGradient(colors: [model.colors[0].opacity(0.18), .clear],
-                                       center: .leading, startRadius: 0, endRadius: 135))
-                }
+            let shape = RoundedRectangle(cornerRadius: 20)
+            shape.fill(Color(white: 0.10))
+            albumLight(shape, opacity: 0.54)
+            spectrumBars(height: 32, opacity: 0.32)
+                .padding(.leading, 48).padding(.trailing, 10)
+                .frame(maxHeight: .infinity, alignment: .bottom).clipShape(shape)
         }
         .foregroundStyle(.white)
         .environment(\.colorScheme, .dark)
@@ -72,13 +79,13 @@ struct MusicView: View {
 
     private func lyricsPanel(_ track: Track) -> some View {
         let shape = RoundedRectangle(cornerRadius: 26)
-        return VStack(alignment: .leading, spacing: 7) {
-            HStack(spacing: 6) {
-                Text("\(track.player.name) · \(model.lyricsLoading ? "查找歌词中" : model.lyrics.isEmpty ? "暂无歌词" : "同步歌词")")
-                    .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+        return VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 9) {
+                Text("\(track.player.name) · \(model.lyricsCaption)")
+                    .font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
                 Spacer(minLength: 0)
-                timingButton("慢 0.5s", delta: -0.5)
-                timingButton("快 0.5s", delta: 0.5)
+                timingButton("minus", label: "歌词延后 0.5 秒", delta: -0.5)
+                timingButton("plus", label: "歌词提前 0.5 秒", delta: 0.5)
                 Menu {
                     Button("导入 LRC 歌词…") { model.loadLRC() }
                     Button("恢复原始时间") { model.adjustOffset(-model.offset) }.disabled(model.offset == 0)
@@ -89,43 +96,70 @@ struct MusicView: View {
                 }
                 .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize().accessibilityLabel("歌词选项")
             }
-            .padding(.leading, 8)
+            .padding(.leading, 12)
             .frame(height: 28)
 
             lyricView(track)
-                .padding(.leading, 8)
+                .padding(.leading, 12)
                 .frame(maxHeight: .infinity)
-                .background(alignment: .bottom) { spectrumBackdrop }
 
-            HStack(spacing: 12) {
-                cover(size: 58)
-                trackNames(track, expanded: true)
-                transport(track, compact: false)
+            VStack(spacing: 5) {
+                HStack(spacing: 13) {
+                    cover(size: 58)
+                    trackNames(track, expanded: true)
+                    transport(track, compact: false)
+                }
+                PlaybackProgress(track: track, tint: model.colors[0]) { model.control(.seek($0)) }
+                    .id(track.key)
             }
-            .padding(.top, 4)
-
-            PlaybackProgress(track: track, tint: model.colors[0]) { model.control(.seek($0)) }
-                .id(track.key)
+            .padding(.top, 6)
         }
-        .padding(.horizontal, 21).padding(.vertical, 13)
+        .padding(.horizontal, 22).padding(.top, 17).padding(.bottom, 18)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background {
-            shape.fill(RadialGradient(colors: [
-                model.colors[0].opacity(colorScheme == .dark ? 0.23 : 0.16),
-                model.colors[1].opacity(colorScheme == .dark ? 0.09 : 0.07), .clear
-            ], center: UnitPoint(x: 0.06, y: 0.93), startRadius: 4, endRadius: 235))
+            ZStack(alignment: .bottom) {
+                shape.fill(appearance.tint(colorScheme))
+                albumLight(shape, opacity: colorScheme == .dark ? 0.66 : 0.43)
+                spectrumBars(height: 142, opacity: 0.34)
+                    .padding(.horizontal, 22).padding(.bottom, 95)
+            }
         }
         .glassEffect(.regular, in: shape)
-        .padding(7)
+        .padding(6)
+    }
+
+    private func albumLight<S: Shape>(_ shape: S, opacity: Double) -> some View {
+        let moving = appearance.animation && !reduceMotion && model.track?.playing == true
+        let strength = opacity * appearance.coverBlend / 0.55
+        let colors = model.colors.map { softenCoverLight($0, saturation: appearance.coverSaturation, light: colorScheme == .light) }
+        return GeometryReader { geometry in
+            if appearance.coverTint {
+                TimelineView(.animation(minimumInterval: 1 / 18, paused: !moving)) { context in
+                    let time = context.date.timeIntervalSinceReferenceDate
+                    let dx = moving ? sin(time * 2 * .pi / 17) * 0.022 : 0
+                    let dy = moving ? sin(time * 2 * .pi / 21) * 0.015 : 0
+                    let width = geometry.size.width
+                    let height = geometry.size.height
+                    let capsule = height < 100
+                    let primary = RadialGradient(colors: [colors[0].opacity(strength), colors[0].opacity(strength * 0.48), .clear],
+                                                 center: UnitPoint(x: 0.28 + dx, y: 0.83 + dy),
+                                                 startRadius: 3, endRadius: max(width * 0.68, height * 0.45))
+                    let secondary = RadialGradient(colors: [colors[1].opacity(strength * 0.73), .clear],
+                                                   center: UnitPoint(x: 0.91 - dx, y: (capsule ? 0.63 : 0.87) - dy),
+                                                   startRadius: 0, endRadius: max(width * 0.65, height * 0.38))
+                    shape.fill(primary).overlay { shape.fill(secondary) }
+                }
+            }
+        }.allowsHitTesting(false)
     }
 
     private func trackNames(_ track: Track, expanded: Bool) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             ScrollingTitle(text: track.title, scroll: !reduceMotion, size: expanded ? 19 : 14)
             Text(track.artist.isEmpty ? track.player.name : track.artist)
-                .font(.system(size: expanded ? 13 : 11)).foregroundStyle(.secondary).lineLimit(1)
+                .font(lumiFont(expanded ? 13 : 11)).foregroundStyle(.secondary).lineLimit(1)
             if expanded && !track.album.isEmpty {
-                Text(track.album).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+                Text(track.album).font(lumiFont(11)).foregroundStyle(.secondary).lineLimit(1)
             }
         }.frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -133,22 +167,22 @@ struct MusicView: View {
     private func transport(_ track: Track, compact: Bool) -> some View {
         GlassEffectContainer(spacing: 6) {
             HStack(spacing: 3) {
-                icon("backward.end.fill", "上一首", size: 27) { model.control(.previous) }
-                icon(track.playing ? "pause.fill" : "play.fill", track.playing ? "暂停" : "播放",
+                icon("backward.end", "上一首", size: 27) { model.control(.previous) }
+                icon(track.playing ? "pause" : "play", track.playing ? "暂停" : "播放",
                      size: compact ? 33 : 41, glass: true) { model.control(.toggle) }
-                icon("forward.end.fill", "下一首", size: 27) { model.control(.next) }
+                icon("forward.end", "下一首", size: 27) { model.control(.next) }
             }
         }
     }
 
-    private func timingButton(_ label: String, delta: Double) -> some View {
+    private func timingButton(_ symbol: String, label: String, delta: Double) -> some View {
         Button { model.adjustOffset(delta) } label: {
-            Text(label).font(.caption.monospacedDigit())
-                .padding(.horizontal, 5).frame(height: 25).contentShape(Rectangle())
+            Image(systemName: symbol).font(.system(size: 15, weight: .medium))
+                .frame(width: 24, height: 25).contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .foregroundStyle(.secondary)
-        .help(String(format: "本曲歌词偏移 %+.1f 秒", model.offset))
+        .accessibilityLabel(label)
+        .help(label + String(format: " · 本曲偏移 %+.1f 秒", model.offset))
         .disabled(model.lyrics.isEmpty)
     }
 
@@ -169,15 +203,33 @@ struct MusicView: View {
     }
 
     private func bars(width: CGFloat) -> some View {
-        TimelineView(.animation(minimumInterval: 1 / 25, paused: !model.spectrumEnabled || model.track?.playing != true)) { _ in
-            let levels = model.track?.playing == true ? model.spectrum.levels : Array(repeating: 0.0, count: 8)
-            HStack(alignment: .center, spacing: 2) {
-                ForEach(Array(levels.enumerated()), id: \.offset) { index, level in
-                    Capsule().fill(model.colors[index < 4 ? 0 : 1].opacity(level > 0 ? 0.92 : 0.46))
-                        .frame(height: 2 + 13 * level)
+        spectrumBars(height: 16, opacity: 0.85, count: 13)
+            .frame(width: width, height: 16)
+    }
+
+    private func spectrumBars(height: CGFloat, opacity: Double, count: Int = 40) -> some View {
+        let enabled = model.spectrumEnabled && model.track?.playing == true
+        return TimelineView(.animation(minimumInterval: 1 / 25, paused: !enabled)) { _ in
+            let values = model.previewSpectrum ?? (enabled ? model.spectrum.levels : [])
+            Canvas { context, size in
+                guard !values.isEmpty else { return }
+                let step = size.width / Double(count)
+                let barWidth = max(0.8, step * 0.46)
+                for index in 0..<count {
+                    let position = Double(index) * Double(values.count - 1) / Double(count - 1)
+                    let lower = Int(position)
+                    let upper = min(values.count - 1, lower + 1)
+                    let fraction = position - Double(lower)
+                    let level = values[lower] * (1 - fraction) + values[upper] * fraction
+                    let barHeight = min(size.height, max(1, level * size.height))
+                    let rect = CGRect(x: step * Double(index) + (step - barWidth) / 2,
+                                      y: size.height - barHeight, width: barWidth, height: barHeight)
+                    context.fill(Path(roundedRect: rect, cornerRadius: barWidth / 2),
+                                 with: .linearGradient(Gradient(colors: [.white.opacity(opacity), .clear]),
+                                                       startPoint: CGPoint(x: 0, y: rect.minY), endPoint: CGPoint(x: 0, y: size.height)))
                 }
-            }.frame(width: width, height: 16)
-        }.accessibilityHidden(true)
+            }.frame(height: height)
+        }.accessibilityHidden(true).allowsHitTesting(false)
     }
 
     private func icon(_ symbol: String, _ label: String, size: CGFloat, glass: Bool = false,
@@ -191,52 +243,63 @@ struct MusicView: View {
                                   in: Circle())
     }
 
-    private var spectrumBackdrop: some View {
-        TimelineView(.animation(minimumInterval: 1 / 25, paused: !model.spectrumEnabled || model.track?.playing != true)) { _ in
-            let levels = model.track?.playing == true ? model.spectrum.levels : []
-            HStack(alignment: .bottom, spacing: 5) {
-                ForEach(Array(levels.enumerated()), id: \.offset) { index, level in
-                    RoundedRectangle(cornerRadius: 5)
-                        .fill(.linearGradient(colors: [model.colors[index < 4 ? 0 : 1].opacity(0.19), .clear],
-                                              startPoint: .top, endPoint: .bottom))
-                        .frame(height: 75 * level)
-                }
-            }.frame(height: 78, alignment: .bottom)
-        }.accessibilityHidden(true).allowsHitTesting(false)
-    }
-
     private func lyricView(_ track: Track) -> some View {
         Group {
             if model.lyrics.isEmpty {
                 Text(model.lyricsLoading ? "正在查找同步歌词…" : "暂无同步歌词")
-                    .font(.system(size: 18, weight: .medium)).foregroundStyle(.secondary)
+                    .font(lumiFont(18, weight: .medium)).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
             } else {
-                TimelineView(.periodic(from: .now, by: 0.15)) { context in
-                    let position = track.position(at: context.date) + model.offset
-                    let current = model.lyrics.lastIndex { $0.time <= position }
-                    let center = current ?? 0
-                    let bounds = max(0, center - 1)..<min(model.lyrics.count, center + 3)
-                    VStack(alignment: .leading, spacing: 10) {
-                        ForEach(bounds, id: \.self) { index in
-                            Text(model.lyrics[index].text)
-                                .font(.system(size: current == index ? 25 : 16,
-                                              weight: current == index ? .semibold : .medium))
-                                .foregroundStyle(current == index ? Color.primary : Color.secondary)
-                                .opacity(current == index ? 1 : 0.69)
-                                .lineLimit(current == index ? 2 : 1)
+                GeometryReader { geometry in
+                    ScrollViewReader { reader in
+                        TimelineView(.periodic(from: .now, by: 0.14)) { context in
+                            let position = track.position(at: context.date) + model.offset
+                            let current = model.lyrics.lastIndex { $0.time <= position }
+                            ScrollView {
+                                LazyVStack(alignment: .leading, spacing: 16) {
+                                    ForEach(Array(model.lyrics.enumerated()), id: \.element.id) { index, line in
+                                        Text(line.text)
+                                            .font(lumiFont(25, weight: .semibold))
+                                            .foregroundStyle(.primary)
+                                            .opacity(current == index ? 1 : 0.53)
+                                            .fixedSize(horizontal: false, vertical: true)
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                            .accessibilityAddTraits(current == index ? .isSelected : [])
+                                            .id(line.id)
+                                    }
+                                }
+                                .padding(.top, geometry.size.height * 0.27)
+                                .padding(.bottom, geometry.size.height * 0.65)
+                            }
+                            .scrollIndicators(.hidden)
+                            .onChange(of: current, initial: true) { old, new in
+                                guard let new, model.lyrics.indices.contains(new) else { return }
+                                let anchor = UnitPoint(x: 0, y: 0.29)
+                                if old == new || reduceMotion {
+                                    reader.scrollTo(model.lyrics[new].id, anchor: anchor)
+                                } else {
+                                    withAnimation(.easeInOut(duration: 0.26)) {
+                                        reader.scrollTo(model.lyrics[new].id, anchor: anchor)
+                                    }
+                                }
+                            }
                         }
                     }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-                    .mask {
-                        LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.12),
-                                               .init(color: .black, location: 0.84), .init(color: .clear, location: 1)],
-                                       startPoint: .top, endPoint: .bottom)
-                    }
+                }
+                .id(track.key)
+                .mask {
+                    LinearGradient(stops: [.init(color: .clear, location: 0),
+                                           .init(color: .black.opacity(0.32), location: 0.10),
+                                           .init(color: .black, location: 0.25),
+                                           .init(color: .black, location: 0.61),
+                                           .init(color: .black.opacity(0.40), location: 0.83),
+                                           .init(color: .clear, location: 1)],
+                                   startPoint: .top, endPoint: .bottom)
                 }
             }
         }
     }
+
 }
 
 private struct PlaybackProgress: View {
@@ -260,7 +323,7 @@ private struct PlaybackProgress: View {
                         seek(value)
                     }
                 }
-                .accessibilityLabel("播放进度").tint(tint).disabled(track.duration <= 0)
+                .accessibilityLabel("播放进度").tint(tint).disabled(track.duration <= 0 || !track.canSeek)
                 Text("\(timeLabel(dragPosition ?? position)) / \(timeLabel(track.duration))")
             }.font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
         }
@@ -280,7 +343,7 @@ private struct ScrollingTitle: View {
 
     var body: some View {
         GeometryReader { geometry in
-            let font = NSFont.systemFont(ofSize: size, weight: .semibold)
+            let font = NSFont(name: "Geist-Regular", size: size) ?? .systemFont(ofSize: size, weight: .semibold)
             let width = (text as NSString).size(withAttributes: [.font: font]).width.rounded(.up)
             let overflow = width - geometry.size.width
             if scroll && overflow > 2 {
@@ -299,7 +362,7 @@ private struct ScrollingTitle: View {
             }
         }
         .frame(height: size + 5)
-        .font(.system(size: size, weight: .semibold))
+        .font(lumiFont(size, weight: .semibold))
         .onChange(of: text) { _, _ in began = .now }
         .accessibilityLabel(text)
     }

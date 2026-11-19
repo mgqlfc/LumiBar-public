@@ -1,14 +1,24 @@
 import AppKit
+import CoreText
 import OSLog
 import SwiftUI
 
 // Command Line Tools ships the state wrapper without the SwiftUI macro plug-in.
 typealias ViewState<Value> = SwiftUI.State<Value>
 
+@MainActor
+func lumiFont(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
+    if NSFont(name: "Geist-Regular", size: size) != nil { return .custom("Geist", size: size).weight(weight) }
+    return .system(size: size, weight: weight)
+}
+
 @main
 enum LumiBarApp {
     @MainActor
     static func main() {
+        if let geist = Bundle.main.url(forResource: "Geist-VariableFont_wght", withExtension: "ttf") {
+            CTFontManagerRegisterFontsForURL(geist as CFURL, .process, nil)
+        }
         let app = NSApplication.shared
         let delegate = LumiBarController()
         app.delegate = delegate
@@ -62,6 +72,7 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
         }
         return .standard
     }()
+    private lazy var appearance = AppearanceModel(defaults: defaults)
     private lazy var weather = WeatherModel(defaults: defaults)
     private lazy var music = MusicModel(defaults: defaults)
     private let status = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -90,11 +101,17 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
         status.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
         status.button?.setAccessibilityLabel("LumiBar 天气")
         weather.onChange = { [weak self] in self?.updateStatus() }
+        appearance.onThemeChange = { [weak self] in
+            guard let self else { return }
+            weatherPanel.appearance = appearance.windowAppearance
+            expandedPanel.appearance = appearance.windowAppearance
+            settings?.appearance = appearance.windowAppearance
+        }
         music.onTrackChange = { [weak self] in self?.layoutMusic() }
 
         for (panel, surface) in [(leadingPanel, MusicView.Surface.leading), (trailingPanel, .trailing),
                                  (capsulePanel, .capsule), (expandedPanel, .expanded)] {
-            panel.contentView = NSHostingView(rootView: MusicView(model: music, surface: surface) { [weak self] in
+            panel.contentView = NSHostingView(rootView: MusicView(model: music, appearance: appearance, surface: surface) { [weak self] in
                 self?.toggleLyrics()
             })
         }
@@ -117,15 +134,16 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
         weatherTimer = Timer.scheduledTimer(timeInterval: 20 * 60, target: self,
                                             selector: #selector(refreshWeather), userInfo: nil, repeats: true)
 
+        let arguments = ProcessInfo.processInfo.arguments
         if preview {
             PreviewData.install(weather: weather, music: music)
-            if ProcessInfo.processInfo.arguments.contains("--weather") {
+            if arguments.contains("--weather") || arguments.contains("--weather-hover") {
                 Task { @MainActor [weak self] in
                     try? await Task.sleep(for: .milliseconds(350))
-                    self?.openPreviewWeather()
+                    self?.openPreviewWeather(compact: arguments.contains("--weather-hover"))
                 }
             }
-            if ProcessInfo.processInfo.arguments.contains("--lyrics") {
+            if arguments.contains("--lyrics") {
                 music.mode = .lyrics
                 layoutMusic()
             }
@@ -134,6 +152,7 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
             music.start()
         }
         updateStatus()
+        if arguments.contains("--settings") { showSettings() }
         logger.notice("LumiBar started")
     }
 
@@ -160,13 +179,13 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
         return anchor
     }
 
-    private func openPreviewWeather() {
+    private func openPreviewWeather(compact: Bool) {
         guard let screen = musicScreen else { return }
         let menuHeight = max(24, screen.safeAreaInsets.top)
         let fallback = NSRect(x: screen.frame.maxX - 168, y: screen.frame.maxY - menuHeight,
                               width: 56, height: menuHeight)
         weatherPinned = true
-        showWeather(anchor: statusFrame ?? fallback, compact: false)
+        showWeather(anchor: statusFrame ?? fallback, compact: compact)
     }
 
     private func updateStatus() {
@@ -176,7 +195,7 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
             let appearance = Weather.appearance(weather.code, day: weather.isDay)
             button.image = menuGlyph(weather) ?? NSImage(systemSymbolName: appearance.symbol, accessibilityDescription: appearance.name)
             button.imagePosition = .imageLeading
-            let temperature = weather.temperature.formatted(.number.precision(.fractionLength(0))) + "°"
+            let temperature = self.weather.temperature(weather.temperature)
             let rain = weather.rain.map { "  💧" + $0.formatted(.number.precision(.fractionLength(0))) + "%" } ?? ""
             let title = NSMutableAttributedString(string: temperature,
                 attributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .semibold)])
@@ -226,10 +245,11 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
     private func showWeather(anchor: NSRect, compact: Bool) {
         guard let screen = NSScreen.screens.first(where: { $0.frame.contains(.init(x: anchor.midX, y: anchor.midY)) })
                 ?? musicScreen else { return }
-        let width = min(compact ? 316 : 478, screen.visibleFrame.width)
-        let height = min(compact ? 205 : 696, max(180, anchor.minY - screen.visibleFrame.minY - 5))
+        let width = min(compact ? 314 : 496, screen.visibleFrame.width)
+        let height = min(compact ? 177 : 696, max(172, anchor.minY - screen.visibleFrame.minY - 5))
+        weatherPanel.appearance = appearance.windowAppearance
         let x = max(screen.visibleFrame.minX, min(anchor.midX - width / 2, screen.visibleFrame.maxX - width))
-        weatherPanel.contentView = NSHostingView(rootView: WeatherView(model: weather, compact: compact,
+        weatherPanel.contentView = NSHostingView(rootView: WeatherView(model: weather, appearance: appearance, compact: compact,
             width: width, height: height, showSettings: { [weak self] in self?.showSettings() },
             quit: { [weak self] in self?.quit() }))
         weatherPanel.ignoresMouseEvents = compact
@@ -330,20 +350,21 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
             } else {
                 leadingPanel.orderOut(nil)
                 trailingPanel.orderOut(nil)
-                capsulePanel.present(.init(x: anchorX - 91, y: top - 32, width: 182, height: 28))
+                capsulePanel.present(.init(x: anchorX - 119, y: top - 39, width: 238, height: 34))
             }
         } else {
             leadingPanel.orderOut(nil)
             trailingPanel.orderOut(nil)
             let menuBottom = min(frame.maxY - 6, screen.visibleFrame.maxY)
-            capsulePanel.present(.init(x: frame.midX - 91, y: menuBottom - 34, width: 182, height: 28))
+            capsulePanel.present(.init(x: frame.midX - 119, y: menuBottom - 40, width: 238, height: 34))
         }
         if music.mode == .compact {
             expandedPanel.orderOut(nil)
         } else {
-            let width: CGFloat = music.mode == .lyrics ? 478 : 342
-            let height: CGFloat = music.mode == .lyrics ? 370 : 78
-            let y = hasNotch ? top + 3 : capsulePanel.frame.minY + 2
+            let width: CGFloat = music.mode == .lyrics ? 432 : 342
+            let y = hasNotch && !capsulePanel.isVisible ? top + 3 : capsulePanel.frame.minY + 2
+            let height = music.mode == .lyrics ? min(658, max(300, y - screen.visibleFrame.minY - 5)) : 78
+            expandedPanel.appearance = appearance.windowAppearance
             expandedPanel.present(.init(x: anchorX - width / 2, y: y - height, width: width, height: height))
         }
     }
@@ -378,9 +399,10 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
         weatherPinned = false
         weatherPanel.orderOut(nil)
         if settings == nil {
-            let controller = NSHostingController(rootView: SettingsView(weather: weather, music: music))
+            let controller = NSHostingController(rootView: SettingsView(appearance: appearance, weather: weather, music: music))
             let window = NSWindow(contentViewController: controller)
-            window.title = "LumiBar 设置"
+            window.title = "LumiBar"
+            window.appearance = appearance.windowAppearance
             window.styleMask = [.titled, .closable]
             window.isReleasedWhenClosed = false
             window.center()
@@ -393,35 +415,3 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
     @objc private func quit() { NSApp.terminate(nil) }
 }
 
-private struct SettingsView: View {
-    @Bindable var weather: WeatherModel
-    @Bindable var music: MusicModel
-
-    var body: some View {
-        Form {
-            Section("音乐岛") {
-                Toggle("显示音乐岛", isOn: $music.showMusic)
-                Toggle("实时频谱（系统音频权限）", isOn: $music.spectrumEnabled)
-                Toggle("从 LRCLIB 查找同步歌词", isOn: $music.onlineLyrics)
-                Text("Apple Music 和 Spotify 使用 macOS 自动化权限。")
-                    .font(.caption).foregroundStyle(.secondary)
-                if let error = music.automationError {
-                    Text(error).font(.caption).foregroundStyle(.secondary)
-                    Button("重新检查自动化权限") { music.retryAutomation() }
-                }
-                if let error = music.audioError { Text(error).font(.caption).foregroundStyle(.secondary) }
-            }
-            Section("天气") {
-                Toggle("优先使用 LumiBar 天气代理", isOn: $weather.proxyEnabled)
-                if weather.proxyEnabled {
-                    TextField("HTTPS 服务地址", text: $weather.proxy)
-                    if WeatherAPI.proxyURL(weather.proxy) == nil { Text("请输入有效的 HTTPS 地址。").foregroundStyle(.red) }
-                }
-                Button("应用并刷新天气") { weather.refresh() }
-                    .disabled(weather.city == nil || (weather.proxyEnabled && WeatherAPI.proxyURL(weather.proxy) == nil))
-            }
-        }
-        .formStyle(.grouped)
-        .frame(width: 455, height: 390)
-    }
-}

@@ -21,6 +21,9 @@ fi
 if [[ -f "$assets/LumiBar.ico" ]]; then
   sips -s format icns "$assets/LumiBar.ico" --out "$app/Contents/Resources/LumiBar.icns" >/dev/null
 fi
+if [[ -f "$assets/Fonts/Geist-VariableFont_wght.ttf" ]]; then
+  cp "$assets/Fonts/Geist-VariableFont_wght.ttf" "$assets/Fonts/Geist-OFL.txt" "$app/Contents/Resources/"
+fi
 cp Resources/Info.plist "$app/Contents/Info.plist"
 codesign --force --sign "${LUMIBAR_SIGN_IDENTITY:--}" "$app"
 printf '%s\n' "$app"
