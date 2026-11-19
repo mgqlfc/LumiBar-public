@@ -108,8 +108,10 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
     private let status = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let weatherPanel = SurfacePanel()
     private let musicStatus = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-    private var weatherStatusContent: StatusContent<WeatherCapsule>?
-    private var musicStatusContent: StatusContent<MusicView>?
+    private var lastMusicImageAt = Date.distantPast
+    private var lastMusicBars: [Int] = []
+    private var lastMusicArt: NSImage?
+    private var lastMusicScheme: ColorScheme?
     private let expandedPanel = SurfacePanel()
     private var settings: SurfacePanel?
     private var timer: Timer?
@@ -155,6 +157,7 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
             settings?.appearance = appearance.windowAppearance
             musicStatus.button?.appearance = appearance.windowAppearance
             updateStatus()
+            updateMusicStatusImage(force: true)
         }
         music.onTrackChange = { [weak self] in self?.layoutMusic() }
         expandedPanel.contentView = NSHostingView(rootView: MusicView(model: music, appearance: appearance,
@@ -197,6 +200,12 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
         }
         updateStatus()
         if arguments.contains("--settings") { showSettings() }
+        if arguments.contains("--check-menu-bar") {
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .milliseconds(750))
+                self?.reportStatusItems()
+            }
+        }
         logger.notice("LumiBar started")
     }
 
@@ -226,13 +235,28 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
         return anchor
     }
 
-    private func placeInStatus<V: View>(_ content: StatusContent<V>, button: NSStatusBarButton) {
-        content.sizingOptions = []
-        content.frame = button.bounds
-        content.autoresizingMask = [.width, .height]
-        button.image = nil
-        button.title = ""
-        button.addSubview(content)
+    private func buttonScheme(_ button: NSStatusBarButton) -> ColorScheme {
+        button.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? .dark : .light
+    }
+
+    private func statusImage<V: View>(_ view: V, button: NSStatusBarButton, size: CGSize) -> NSImage? {
+        let renderer = ImageRenderer(content: view.frame(width: size.width, height: size.height)
+            .environment(\.colorScheme, buttonScheme(button)))
+        renderer.scale = button.window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2
+        let image = renderer.nsImage
+        image?.isTemplate = false
+        return image
+    }
+
+    private func reportStatusItems() {
+        let top = NSScreen.screens.first?.frame.maxY ?? 0
+        for (name, item) in [("weather", status), ("music", musicStatus)] {
+            guard let frame = entryFrame(item), let image = item.button?.image else {
+                logger.notice("Menu bar \(name, privacy: .public): no active item")
+                continue
+            }
+            logger.notice("Menu bar \(name, privacy: .public): rect \(Int(frame.minX)),\(Int(top - frame.maxY)),\(Int(frame.width)),\(Int(frame.height)) image \(Int(image.size.width))×\(Int(image.size.height))")
+        }
     }
 
     private func openPreviewWeather(compact: Bool) {
@@ -247,13 +271,18 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
     private func updateStatus() {
         guard let button = status.button else { return }
         let capsule = WeatherCapsule(model: weather, appearance: appearance, lite: appearance.weatherLite, height: capsuleHeight)
-        status.length = capsule.idealWidth + 4
         button.appearance = appearance.windowAppearance
-        if let content = weatherStatusContent { content.rootView = capsule }
-        else {
-            let content = StatusContent(rootView: capsule)
-            placeInStatus(content, button: button)
-            weatherStatusContent = content
+        let size = CGSize(width: capsule.idealWidth + 4, height: capsuleHeight)
+        status.length = size.width
+        button.imagePosition = .imageOnly
+        button.title = ""
+        if let image = statusImage(capsule, button: button, size: size) {
+            button.image = image
+        } else {
+            status.length = NSStatusItem.squareLength
+            let image = NSImage(systemSymbolName: "cloud.sun", accessibilityDescription: nil)
+            image?.isTemplate = true
+            button.image = image
         }
         if let forecast = weather.weather {
             let condition = forecast.conditionText ?? Weather.appearance(forecast.code, day: forecast.isDay).name
@@ -367,6 +396,7 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
         }
 
         guard music.track != nil, !backgrounded else { return }
+        updateMusicStatusImage()
         let hovering = musicFrame?.contains(pointer) == true
             || (expandedPanel.isVisible && expandedPanel.frame.insetBy(dx: -2, dy: -4).contains(pointer))
         if hovering && !wasAtMusic { musicHoverStartsAt = now }
@@ -405,23 +435,41 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
         layoutMusic()
     }
 
+    private func updateMusicStatusImage(force: Bool = false) {
+        guard let track = music.track, musicStatus.isVisible, let button = musicStatus.button else { return }
+        let now = Date.now
+        guard force || now.timeIntervalSince(lastMusicImageAt) > 0.09 else { return }
+        lastMusicImageAt = now
+        let levels = music.previewSpectrum ?? (music.spectrumEnabled && track.playing
+            && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? music.spectrum.levels : [])
+        let bands = (0..<8).map { index -> Int in
+            guard !levels.isEmpty else { return 0 }
+            let sample = levels[min(levels.count - 1, index * levels.count / 8)]
+            return Int((min(1, max(0, sample)) * 11).rounded())
+        }
+        let scheme = buttonScheme(button)
+        guard force || bands != lastMusicBars || music.artwork !== lastMusicArt || scheme != lastMusicScheme else { return }
+        lastMusicBars = bands
+        lastMusicArt = music.artwork
+        lastMusicScheme = scheme
+        let entry = MusicView(model: music, appearance: appearance, surface: .entry(capsuleHeight, bands)) { }
+        button.imagePosition = .imageOnly
+        button.title = ""
+        button.image = statusImage(entry, button: button, size: CGSize(width: 63, height: capsuleHeight))
+            ?? NSImage(systemSymbolName: "music.note", accessibilityDescription: nil)
+    }
+
     private func layoutMusic() {
         guard let track = music.track, !backgrounded else {
             musicStatus.isVisible = false
             expandedPanel.dismiss(duration: motion ? 0.18 : 0)
             return
         }
-        let entry = MusicView(model: music, appearance: appearance, surface: .entry(capsuleHeight)) { }
         musicStatus.length = 63
         musicStatus.isVisible = true
         guard let button = musicStatus.button else { return }
         button.appearance = appearance.windowAppearance
-        if let content = musicStatusContent { content.rootView = entry }
-        else {
-            let content = StatusContent(rootView: entry)
-            placeInStatus(content, button: button)
-            musicStatusContent = content
-        }
+        updateMusicStatusImage(force: true)
         button.setAccessibilityLabel("LumiBar 音乐，\(track.title)，\(track.artist)")
         guard music.mode != .compact else {
             expandedPanel.dismiss(duration: motion ? 0.18 : 0)

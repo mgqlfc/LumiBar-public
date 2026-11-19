@@ -15,11 +15,6 @@ struct FlyoutChrome: ViewModifier {
     }
 }
 
-// Keep the status item as the accessible click target and let its child draw.
-final class StatusContent<Content: View>: NSHostingView<Content> {
-    override func hitTest(_ point: NSPoint) -> NSView? { nil }
-}
-
 struct WeatherCapsule: View {
     let model: WeatherModel
     let appearance: AppearanceModel

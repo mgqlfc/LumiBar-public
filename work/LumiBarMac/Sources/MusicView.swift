@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct MusicView: View {
-    enum Surface { case entry(CGFloat), expanded }
+    enum Surface { case entry(CGFloat, [Int]), expanded }
     let model: MusicModel
     let appearance: AppearanceModel
     let surface: Surface
@@ -12,11 +12,16 @@ struct MusicView: View {
     var body: some View {
         if let track = model.track {
             switch surface {
-            case .entry(let height):
+            case .entry(let height, let bands):
                 HStack(spacing: 6) {
                     cover(size: min(21, height - 4))
-                    spectrumBars(height: 13, opacity: 0.78, count: 8, color: .primary)
-                        .frame(width: 24)
+                    HStack(alignment: .center, spacing: 1.5) {
+                        ForEach(bands.indices, id: \.self) { index in
+                            Capsule()
+                                .fill(Color.primary.opacity(bands[index] == 0 ? 0.32 : 0.78))
+                                .frame(width: 1.5, height: 2 + CGFloat(bands[index]))
+                        }
+                    }.frame(width: 24, height: 13)
                 }
                 .frame(width: 59, height: height)
                 .background(model.colors[0].opacity(colorScheme == .dark ? 0.20 : 0.14), in: Capsule())
