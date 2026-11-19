@@ -305,6 +305,8 @@ final class MusicModel {
                     candidates.append(netease)
                     if !trusted {
                         neteaseStatus = "已识别当前曲目。允许「辅助功能」后可使用播放控件。"
+                    } else if !netease.canControl {
+                        neteaseStatus = "已识别当前曲目。请保持网易云主窗口打开以读取播放控件。"
                     } else if netease.estimatedPosition {
                         neteaseStatus = "已连接网易云音乐，正在使用估算进度。"
                     } else {

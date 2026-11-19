@@ -40,69 +40,109 @@ actor NeteaseBridge {
     }
 
     private struct PlayerView {
-        let progress: Progress
-        let labels: [String]
+        let progress: Progress?
+        let controls: [AXUIElement]
+        let track: CatalogTrack?
+    }
+
+    private struct QueueFile: Decodable {
+        struct Entry: Decodable {
+            let track: CatalogTrack?
+            enum CodingKeys: String, CodingKey { case track }
+            init(from decoder: Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                track = try? container.decode(CatalogTrack.self, forKey: .track)
+            }
+        }
+        let list: [Entry]
     }
 
     private static let playNames = ["播放", "开始播放", "Play", "Resume"]
     private static let pauseNames = ["暂停", "Pause"]
     private static let previousNames = ["上一首", "上一曲", "上一首歌曲", "上一个", "Previous", "Previous Track", "Previous Song"]
+    private static let toggleNames = ["播放/暂停", "播放 / 暂停", "Play/Pause", "Play / Pause"]
     private static let nextNames = ["下一首", "下一曲", "下一首歌曲", "下一个", "Next", "Next Track", "Next Song"]
     private var lastTrack: Track?
     private var lastProgress: Progress?
     private let logger = Logger(subsystem: "com.lumibar.macos", category: "netease")
     private var lastDiagnostic: String?
     private var cachedPlayer: (pid_t, AXUIElement)?
+    private var cachedBar: AXUIElement?
+    private var accessibilityActivated = false
+    private var queueCache: (url: URL, date: Date, tracks: [CatalogTrack])?
 
     func read(pid: pid_t, trusted: Bool) -> Track? {
         let now = Date.now
         let app = application(pid)
+        if trusted && !accessibilityActivated {
+            // Ask the application to expose its web-based playback bar to assistive clients.
+            if AXUIElementSetAttributeValue(app, "AXManualAccessibility" as CFString, kCFBooleanTrue) != .success {
+                AXUIElementSetAttributeValue(app, "AXEnhancedUserInterface" as CFString, kCFBooleanTrue)
+            }
+            accessibilityActivated = true
+        }
+
+        let history = readHistory()
+        let recent = history.map(\.track)
+        let catalog = trusted ? recent + queueTracks() : []
         let items = trusted ? controls(app) : []
-        let pause = item(named: Self.pauseNames, in: items)
-        let play = item(named: Self.playNames, in: items)
-        let state = pause.map { enabled($0) } ?? play.map { _ in false }
-        let view = trusted ? playerView(app) : nil
-        let inferred = playStateFromProgress(view?.progress, previous: lastTrack, pid: pid)
+        let view = trusted ? playerView(app, catalog: catalog) : nil
+        let available = items + (view?.controls ?? [])
+        let pause = item(named: Self.pauseNames, in: available)
+        let play = item(named: Self.playNames, in: available)
+        let state = pause.flatMap { enabled($0) ? true : nil } ?? play.map { _ in false }
+        let canControl = pause != nil || play != nil || item(named: Self.toggleNames, in: available) != nil
         let playback = AudioPlayback.applicationObjects(pid: pid, bundleID: Player.netease.rawValue)
         let hasAudio = AudioPlayback.hasOutput(playback)
+        let progress = view?.progress
+        let inferred = playStateFromProgress(progress, previous: lastTrack, pid: pid)
         let playing = state ?? inferred ?? hasAudio
-        let canControl = pause != nil || play != nil
-        let history = readHistory()
-        let catalog = view.flatMap { historyTrack(matching: $0, history: history) }
-        let fromUI = view.flatMap { trackLabels($0.labels) }
-        lastProgress = view?.progress
+        lastProgress = progress
 
         let track: Track?
-        if let view, let title = catalog?.name ?? fromUI?.title {
-            let progress = view.progress
-            track = Track(player: .netease, title: title, artist: artist(catalog) ?? fromUI?.artist ?? "",
-                          album: catalog?.album?.name ?? "", duration: progress.duration,
-                          position: progress.position, playing: playing,
-                          artworkURL: catalog?.album?.picUrl.flatMap(Self.artworkURL), pid: pid,
-                          observedAt: now, catalogID: catalog?.id,
-                          canSeek: progress.slider.map(isWritable) ?? false, canControl: canControl)
+        if let current = view?.track {
+            track = makeTrack(current, progress: progress, history: history, now: now, pid: pid,
+                              playing: playing, canControl: canControl)
         } else if let newest = history.first, let started = newest.started,
-                  let recent = estimate(newest.track, started: started, now: now, pid: pid,
-                                        playing: playing, hasAudio: hasAudio, canControl: canControl) {
-            track = recent
+                  let confirmed = estimate(newest.track, started: started, now: now, pid: pid,
+                                           playing: playing, hasAudio: hasAudio, canControl: canControl) {
+            track = confirmed
         } else {
             track = nil
         }
 
-        let diagnostic = "authorized=\(trusted) menu=\(canControl) elapsed=\(view != nil) audio=\(hasAudio) track=\(track != nil)"
+        let diagnostic = "authorized=\(trusted) menu=\(canControl) bar=\(view != nil) liveTitle=\(view?.track != nil) elapsed=\(progress != nil) audio=\(hasAudio) track=\(track != nil)"
         if lastDiagnostic != diagnostic {
             logger.notice("\(diagnostic, privacy: .public)")
             lastDiagnostic = diagnostic
         }
+        if let track, track.key != lastTrack?.key {
+            logger.notice("NetEase track changed")
+        }
         lastTrack = track
         return track
+    }
+
+    private func makeTrack(_ catalog: CatalogTrack, progress: Progress?, history: [History], now: Date, pid: pid_t,
+                           playing: Bool, canControl: Bool) -> Track {
+        let duration = progress?.duration ?? Double(catalog.duration) / 1000
+        let previous = lastTrack.flatMap { $0.catalogID != nil && $0.catalogID == catalog.id ? $0 : nil }
+        let started = history.first(where: { $0.track.id != nil && $0.track.id == catalog.id })?.started
+        let age = started.map { now.timeIntervalSince($0) }
+        let recentPosition = age.flatMap { (0...max(0, duration)).contains($0) ? $0 : nil }
+        let position = progress?.position ?? previous?.position(at: now) ?? recentPosition ?? 0
+        return Track(player: .netease, title: catalog.name, artist: artist(catalog) ?? "",
+                     album: catalog.album?.name ?? "", duration: duration, position: position,
+                     playing: playing, artworkURL: catalog.album?.picUrl.flatMap(Self.artworkURL), pid: pid,
+                     observedAt: now, catalogID: catalog.id, canSeek: progress?.slider.map(isWritable) ?? false,
+                     canControl: canControl, estimatedPosition: progress == nil)
     }
 
     private func estimate(_ catalog: CatalogTrack, started: Date, now: Date, pid: pid_t, playing: Bool,
                           hasAudio: Bool, canControl: Bool) -> Track? {
         let duration = Double(catalog.duration) / 1000
         let age = now.timeIntervalSince(started)
-        guard duration > 0, (-5...(duration + 20)).contains(age) else { return nil }
+        guard duration > 0, (-5...duration).contains(age) else { return nil }
         // A recent history entry on its own can be from a closed or paused player.
         let previous = lastTrack.flatMap { $0.catalogID == catalog.id ? $0 : nil }
         guard playing || hasAudio || previous != nil else { return nil }
@@ -126,23 +166,28 @@ actor NeteaseBridge {
     func control(_ command: PlaybackCommand, pid: pid_t) -> Bool {
         guard AXIsProcessTrusted() else { return false }
         let app = application(pid)
+        let live = cachedBar.map { scan($0, catalog: []) }
         if case .seek(let seconds) = command {
-            guard let progress = playerView(app)?.progress, let slider = progress.slider,
+            guard let progress = live?.progress, let slider = progress.slider,
                   isWritable(slider), seconds.isFinite else { return false }
             return AXUIElementSetAttributeValue(slider, kAXValueAttribute as CFString,
                                                NSNumber(value: min(progress.duration, max(0, seconds)))) == .success
         }
-        let items = controls(app)
+        let candidates = controls(app) + (live?.controls ?? [])
         let names: [String] = switch command {
-        case .toggle: Self.pauseNames + Self.playNames
+        case .toggle: Self.pauseNames + Self.playNames + Self.toggleNames
         case .previous: Self.previousNames
         case .next: Self.nextNames
         case .seek: []
         }
         for name in names {
-            if let control = item(named: [name], in: items), enabled(control),
-               AXUIElementPerformAction(control, kAXPressAction as CFString) == .success { return true }
+            if let control = item(named: [name], in: candidates), enabled(control),
+               AXUIElementPerformAction(control, kAXPressAction as CFString) == .success {
+                logger.notice("NetEase playback command accepted by the player")
+                return true
+            }
         }
+        logger.notice("NetEase playback command has no matching accessible control")
         return false
     }
 
@@ -152,6 +197,8 @@ actor NeteaseBridge {
         AXUIElementSetMessagingTimeout(application, 0.35)
         lastTrack = nil
         lastProgress = nil
+        cachedBar = nil
+        accessibilityActivated = false
         cachedPlayer = (pid, application)
         return application
     }
@@ -173,70 +220,139 @@ actor NeteaseBridge {
     }
 
     private func item(named names: [String], in items: [AXUIElement]) -> AXUIElement? {
-        items.first { item in
-            guard let title = attribute(item, kAXTitleAttribute) as? String else { return false }
-            return names.contains(title.trimmingCharacters(in: .whitespacesAndNewlines))
+        let normalized = Set(names.map(Self.normalizedText))
+        return items.first { control in
+            let labels = [kAXTitleAttribute, kAXDescriptionAttribute, kAXHelpAttribute].compactMap {
+                attribute(control, $0) as? String
+            }
+            return labels.contains { normalized.contains(Self.normalizedText($0)) }
         }
     }
 
-    private func playerView(_ app: AXUIElement) -> PlayerView? {
-        let windows = attribute(app, kAXWindowsAttribute) as? [AXUIElement] ?? []
-        let primary = element(app, kAXMainWindowAttribute)
-        let ordered = primary.map { main in [main] + windows.filter { !CFEqual($0, main) } } ?? windows
-        for window in ordered.prefix(3) {
-            let candidates = nodes(window, depth: 6, budget: 200).filter {
-                guard attribute($0, kAXRoleAttribute) as? String == kAXGroupRole,
-                      let size = size($0) else { return false }
-                return size.width >= 275 && (40...108).contains(size.height)
-            }
-            for group in candidates {
-                if let view = scan(group, depth: 5, budget: 100) { return view }
-            }
-            if let view = scan(window, depth: 6, budget: 180) { return view }
+    private func playerView(_ app: AXUIElement, catalog: [CatalogTrack]) -> PlayerView? {
+        if let cachedBar {
+            let current = scan(cachedBar, catalog: catalog)
+            if current.track != nil || current.progress != nil { return current }
         }
+        let windows = attribute(app, kAXWindowsAttribute) as? [AXUIElement] ?? []
+        let primary = element(app, kAXMainWindowAttribute) ?? element(app, kAXFocusedWindowAttribute)
+        let ordered = primary.map { main in [main] + windows.filter { !CFEqual($0, main) } } ?? windows
+        for window in ordered.prefix(2) {
+            let frame = bounds(window)
+            let hits = frame.map { footerGroups(app, frame: $0) } ?? []
+            var roots = hits
+            for group in nodes(window, depth: 8, budget: 155) {
+                guard let rect = bounds(group), (30...133).contains(rect.height), rect.width >= 235 else { continue }
+                if let frame, abs(rect.maxY - frame.maxY) > 132 { continue }
+                if !roots.contains(where: { CFEqual($0, group) }) { roots.append(group) }
+            }
+            if roots.isEmpty, let frame, frame.height <= 145 { roots.append(window) }
+            var progressCandidate: (AXUIElement, PlayerView)?
+            for group in roots.prefix(9) {
+                let view = scan(group, catalog: catalog)
+                if view.track != nil {
+                    cachedBar = group
+                    return view
+                }
+                if view.progress != nil && progressCandidate == nil { progressCandidate = (group, view) }
+            }
+            if let (group, view) = progressCandidate {
+                cachedBar = group
+                return view
+            }
+        }
+        cachedBar = nil
         return nil
     }
 
-    private func scan(_ root: AXUIElement, depth: Int, budget: Int) -> PlayerView? {
+    private func footerGroups(_ app: AXUIElement, frame: CGRect) -> [AXUIElement] {
+        guard frame.width >= 235, frame.height >= 32 else { return [] }
+        var picks: [AXUIElement] = []
+        for x in [frame.minX + 54, frame.midX, frame.maxX - 55] {
+            var hit: AXUIElement?
+            guard AXUIElementCopyElementAtPosition(app, Float(x), Float(frame.maxY - 27), &hit) == .success,
+                  var node = hit else { continue }
+            for _ in 0..<7 {
+                if let rect = bounds(node), rect.width >= 235, (30...133).contains(rect.height),
+                   rect.maxY >= frame.maxY - 125, !picks.contains(where: { CFEqual($0, node) }) {
+                    picks.append(node)
+                }
+                guard let parent = element(node, kAXParentAttribute) else { break }
+                node = parent
+            }
+        }
+        return picks
+    }
+
+    private func scan(_ root: AXUIElement, catalog: [CatalogTrack]) -> PlayerView {
         var progress: Progress?
         var slider: Progress?
         var labels: [String] = []
         var clocks: [Double] = []
-        for node in nodes(root, depth: depth, budget: budget) {
-            switch attribute(node, kAXRoleAttribute) as? String {
-            case kAXStaticTextRole, kAXTextFieldRole, "AXLink":
-                let text = (attribute(node, kAXValueAttribute) as? String)
-                    ?? (attribute(node, kAXTitleAttribute) as? String) ?? ""
-                let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-                if let (position, duration) = Self.parseTimePair(trimmed) {
-                    progress = .init(position: position, duration: duration, slider: nil)
-                } else if trimmed.contains(":"), let seconds = Self.parseClock(trimmed[...]) {
-                    clocks.append(seconds)
-                } else if !trimmed.isEmpty, trimmed.count <= 160, !labels.contains(trimmed) {
-                    labels.append(trimmed)
-                }
-            case kAXSliderRole:
+        var buttons: [AXUIElement] = []
+        let deadline = ContinuousClock.now + .milliseconds(220)
+        for node in nodes(root, depth: 8, budget: 110) {
+            if ContinuousClock.now > deadline { break }
+            let role = attribute(node, kAXRoleAttribute) as? String
+            if role == kAXSliderRole {
                 let position = (attribute(node, kAXValueAttribute) as? NSNumber)?.doubleValue
                 let maximum = (attribute(node, kAXMaxValueAttribute) as? NSNumber)?.doubleValue
-                if let position, let maximum, maximum.isFinite, (30...86400).contains(maximum),
+                if let position, let maximum, maximum.isFinite, (15...86400).contains(maximum),
                    position.isFinite, (0...maximum).contains(position) {
                     slider = .init(position: position, duration: maximum, slider: node)
                 }
-            default: break
+                continue
+            }
+            let accessible = [kAXTitleAttribute, kAXValueAttribute, kAXDescriptionAttribute]
+            if role == kAXButtonRole || role == kAXCheckBoxRole { buttons.append(node) }
+            if role == kAXStaticTextRole || role == kAXTextFieldRole || role == "AXLink" || role == kAXButtonRole {
+                for key in accessible {
+                    guard let value = attribute(node, key) as? String else { continue }
+                    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if let (position, length) = Self.parseTimePair(trimmed) {
+                        progress = .init(position: position, duration: length, slider: nil)
+                    } else if trimmed.contains(":"), let seconds = Self.parseClock(trimmed[...]) {
+                        if clocks.last != seconds { clocks.append(seconds) }
+                    } else if !trimmed.isEmpty, trimmed.count <= 160, !labels.contains(trimmed) {
+                        labels.append(trimmed)
+                    }
+                }
             }
         }
         if progress == nil, clocks.count == 2, clocks[1] > 0, clocks[0] <= clocks[1] {
             progress = .init(position: clocks[0], duration: clocks[1], slider: nil)
         }
-        if let progress {
-            let matched = slider.flatMap { abs($0.duration - progress.duration) < 2 ? $0 : nil }
-            return .init(progress: matched ?? progress, labels: labels)
+        if let old = progress, let slider, abs(old.duration - slider.duration) < 2 { progress = slider }
+        let candidate = Self.matchTrack(labels: labels, duration: progress?.duration, catalog: catalog)
+        if progress == nil, let slider, let candidate,
+           abs(slider.duration - Double(candidate.duration) / 1000) < 2 {
+            progress = slider
         }
-        // A bare slider could be volume. Require song text before using it.
-        if let slider, labels.count >= 2, slider.duration != 100 {
-            return .init(progress: slider, labels: labels)
+        return .init(progress: progress, controls: buttons, track: candidate)
+    }
+
+    private static func normalizedText(_ value: String) -> String {
+        value.folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: .current)
+            .split(whereSeparator: \.isWhitespace).joined(separator: " ")
+    }
+
+    static func matchTrack(labels: [String], duration: Double?, catalog: [CatalogTrack]) -> CatalogTrack? {
+        let normalized = Set(labels.map(normalizedText))
+        var matches = catalog.filter { song in
+            let name = normalizedText(song.name)
+            return !name.isEmpty && normalized.contains(name)
         }
-        return nil
+        guard !matches.isEmpty else { return nil }
+        let withArtist = matches.filter { song in
+            song.artists.contains { person in normalized.contains(normalizedText(person.name)) }
+        }
+        if !withArtist.isEmpty { matches = withArtist }
+        if let duration {
+            let sameLength = matches.filter { abs(Double($0.duration) / 1000 - duration) < 2 }
+            if !sameLength.isEmpty { matches = sameLength }
+        }
+        let identifiers = Set(matches.compactMap(\.id))
+        return identifiers.count <= 1 ? matches.first : nil
     }
 
     static func parseTimePair(_ text: String) -> (Double, Double)? {
@@ -255,14 +371,6 @@ actor NeteaseBridge {
         return Double(numbers.reduce(0) { $0 * 60 + $1 })
     }
 
-    private func trackLabels(_ labels: [String]) -> (title: String, artist: String)? {
-        // The full window also exposes page labels. Only infer a pair from a small player bar.
-        guard (2...4).contains(labels.count) else { return nil }
-        let candidates = labels.filter { $0.range(of: #"^\d+:\d\d$"#, options: .regularExpression) == nil }
-        guard candidates.count == 2 else { return nil }
-        return (candidates[0], candidates[1])
-    }
-
     private func playStateFromProgress(_ progress: Progress?, previous: Track?, pid: pid_t) -> Bool? {
         guard let progress else { return nil }
         if let lastProgress, abs(lastProgress.duration - progress.duration) < 2 {
@@ -273,22 +381,35 @@ actor NeteaseBridge {
         return previous.playing
     }
 
-    private func historyTrack(matching view: PlayerView, history: [History]) -> CatalogTrack? {
-        let tracks = history.map(\.track)
-        let matches = tracks.filter { abs(Double($0.duration) / 1000 - view.progress.duration) <= 1.5 }
-        if let exact = matches.first(where: { view.labels.contains($0.name) }) { return exact }
-        if let newest = tracks.first, abs(Double(newest.duration) / 1000 - view.progress.duration) <= 1.5 {
-            return newest
+    private var storageFolders: [URL] {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        return ["Library/Application Support/com.netease.163music/Documents/storage",
+                "Library/Containers/com.netease.163music/Data/Documents/storage"].map { home.appending(path: $0) }
+    }
+
+    private func queueTracks() -> [CatalogTrack] {
+        for root in storageFolders {
+            let queue = root.appending(path: "file_storage/webdata/file/playingList")
+            guard let values = try? queue.resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey]),
+                  let date = values.contentModificationDate, let size = values.fileSize, (1...8_000_000).contains(size)
+            else { continue }
+            if let cache = queueCache, cache.url == queue, cache.date == date { return cache.tracks }
+            guard let bytes = try? Data(contentsOf: queue), bytes.count <= 8_000_000 else { continue }
+            let archived = (try? PropertyListSerialization.propertyList(from: bytes, options: [], format: nil)) as? [String: Any]
+            let strings = (archived?["$objects"] as? [Any])?.compactMap { $0 as? String }
+            let payload = strings?.first(where: { $0.hasPrefix(#"{"list":"#) }).map { Data($0.utf8) } ?? bytes
+            if let result = try? JSONDecoder().decode(QueueFile.self, from: payload) {
+                let tracks = Array(result.list.prefix(2000)).compactMap(\.track)
+                queueCache = (queue, date, tracks)
+                return tracks
+            }
         }
-        return nil
+        return []
     }
 
     private func readHistory() -> [History] {
-        let home = FileManager.default.homeDirectoryForCurrentUser
-        let locations = ["Library/Application Support/com.netease.163music/Documents/storage",
-                         "Library/Containers/com.netease.163music/Data/Documents/storage"]
-        for location in locations {
-            let db = home.appending(path: location).appending(path: "sqlite_storage.sqlite3")
+        for root in storageFolders {
+            let db = root.appending(path: "sqlite_storage.sqlite3")
             guard FileManager.default.isReadableFile(atPath: db.path) else { continue }
             let rows = Self.history(db)
             if !rows.isEmpty { return rows }
@@ -357,11 +478,16 @@ actor NeteaseBridge {
         return (value as! AXUIElement)
     }
 
-    private func size(_ node: AXUIElement) -> CGSize? {
-        guard let value = attribute(node, kAXSizeAttribute), CFGetTypeID(value) == AXValueGetTypeID() else { return nil }
-        var result = CGSize.zero
-        guard AXValueGetValue(value as! AXValue, .cgSize, &result) else { return nil }
-        return result
+    private func bounds(_ node: AXUIElement) -> CGRect? {
+        guard let dimensions = attribute(node, kAXSizeAttribute), CFGetTypeID(dimensions) == AXValueGetTypeID(),
+              let coordinates = attribute(node, kAXPositionAttribute), CFGetTypeID(coordinates) == AXValueGetTypeID()
+        else { return nil }
+        var size = CGSize.zero
+        var point = CGPoint.zero
+        guard AXValueGetValue(dimensions as! AXValue, .cgSize, &size),
+              AXValueGetValue(coordinates as! AXValue, .cgPoint, &point)
+        else { return nil }
+        return CGRect(origin: point, size: size)
     }
 
     private func enabled(_ node: AXUIElement) -> Bool {
@@ -380,7 +506,7 @@ actor NeteaseBridge {
     private func nodes(_ root: AXUIElement, depth: Int, budget: Int) -> [AXUIElement] {
         var stack = [(root, 0)]
         var output: [AXUIElement] = []
-        let deadline = ContinuousClock.now + .milliseconds(420)
+        let deadline = ContinuousClock.now + .milliseconds(145)
         while let (node, level) = stack.popLast(), output.count < budget, ContinuousClock.now < deadline {
             output.append(node)
             if level < depth {
