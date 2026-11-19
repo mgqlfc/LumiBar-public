@@ -1,5 +1,6 @@
 import ApplicationServices
 import Foundation
+import OSLog
 import SQLite3
 
 actor NeteaseBridge {
@@ -27,6 +28,11 @@ actor NeteaseBridge {
         }
     }
 
+    private struct History {
+        let track: CatalogTrack
+        let started: Date?
+    }
+
     private struct Progress {
         let position: Double
         let duration: Double
@@ -44,35 +50,77 @@ actor NeteaseBridge {
     private static let nextNames = ["下一首", "下一曲", "下一首歌曲", "下一个", "Next", "Next Track", "Next Song"]
     private var lastTrack: Track?
     private var lastProgress: Progress?
+    private let logger = Logger(subsystem: "com.lumibar.macos", category: "netease")
+    private var lastDiagnostic: String?
     private var cachedPlayer: (pid_t, AXUIElement)?
 
-    func read(pid: pid_t) -> Track? {
-        guard AXIsProcessTrusted() else { return nil }
+    func read(pid: pid_t, trusted: Bool) -> Track? {
+        let now = Date.now
         let app = application(pid)
-        let items = controls(app)
+        let items = trusted ? controls(app) : []
         let pause = item(named: Self.pauseNames, in: items)
         let play = item(named: Self.playNames, in: items)
         let state = pause.map { enabled($0) } ?? play.map { _ in false }
-
-        let view = playerView(app)
+        let view = trusted ? playerView(app) : nil
         let inferred = playStateFromProgress(view?.progress, previous: lastTrack, pid: pid)
+        let playback = AudioPlayback.applicationObjects(pid: pid, bundleID: Player.netease.rawValue)
+        let hasAudio = AudioPlayback.hasOutput(playback)
+        let playing = state ?? inferred ?? hasAudio
+        let canControl = pause != nil || play != nil
+        let history = readHistory()
+        let catalog = view.flatMap { historyTrack(matching: $0, history: history) }
+        let fromUI = view.flatMap { trackLabels($0.labels) }
         lastProgress = view?.progress
-        guard let playing = state ?? inferred, let view else { return nil }
-        let progress = view.progress
-        guard progress.duration > 0 else { return nil }
 
-        let catalog = historyTrack(matching: view)
-        let fromUI = trackLabels(view.labels)
-        guard let title = catalog?.name ?? fromUI?.title else { return nil }
-        let artists = catalog?.artists.map(\.name).filter { !$0.isEmpty }.joined(separator: " / ")
-        let artwork = catalog?.album?.picUrl.flatMap(Self.artworkURL)
-        let track = Track(player: .netease, title: title, artist: artists ?? fromUI?.artist ?? "",
+        let track: Track?
+        if let view, let title = catalog?.name ?? fromUI?.title {
+            let progress = view.progress
+            track = Track(player: .netease, title: title, artist: artist(catalog) ?? fromUI?.artist ?? "",
                           album: catalog?.album?.name ?? "", duration: progress.duration,
-                          position: progress.position, playing: playing, artworkURL: artwork, pid: pid,
-                          observedAt: .now, catalogID: catalog?.id,
-                          canSeek: progress.slider.map(isWritable) ?? false)
+                          position: progress.position, playing: playing,
+                          artworkURL: catalog?.album?.picUrl.flatMap(Self.artworkURL), pid: pid,
+                          observedAt: now, catalogID: catalog?.id,
+                          canSeek: progress.slider.map(isWritable) ?? false, canControl: canControl)
+        } else if let newest = history.first, let started = newest.started,
+                  let recent = estimate(newest.track, started: started, now: now, pid: pid,
+                                        playing: playing, hasAudio: hasAudio, canControl: canControl) {
+            track = recent
+        } else {
+            track = nil
+        }
+
+        let diagnostic = "authorized=\(trusted) menu=\(canControl) elapsed=\(view != nil) audio=\(hasAudio) track=\(track != nil)"
+        if lastDiagnostic != diagnostic {
+            logger.notice("\(diagnostic, privacy: .public)")
+            lastDiagnostic = diagnostic
+        }
         lastTrack = track
         return track
+    }
+
+    private func estimate(_ catalog: CatalogTrack, started: Date, now: Date, pid: pid_t, playing: Bool,
+                          hasAudio: Bool, canControl: Bool) -> Track? {
+        let duration = Double(catalog.duration) / 1000
+        let age = now.timeIntervalSince(started)
+        guard duration > 0, (-5...(duration + 20)).contains(age) else { return nil }
+        // A recent history entry on its own can be from a closed or paused player.
+        let previous = lastTrack.flatMap { $0.catalogID == catalog.id ? $0 : nil }
+        guard playing || hasAudio || previous != nil else { return nil }
+        let seconds: Double
+        if let previous {
+            seconds = previous.position(at: now)
+        } else {
+            seconds = min(duration, max(0, age))
+        }
+        return Track(player: .netease, title: catalog.name, artist: artist(catalog) ?? "",
+                     album: catalog.album?.name ?? "", duration: duration, position: seconds,
+                     playing: playing, artworkURL: catalog.album?.picUrl.flatMap(Self.artworkURL),
+                     pid: pid, observedAt: now, catalogID: catalog.id, canSeek: false,
+                     canControl: canControl, estimatedPosition: true)
+    }
+
+    private func artist(_ catalog: CatalogTrack?) -> String? {
+        catalog?.artists.map(\.name).filter { !$0.isEmpty }.joined(separator: " / ")
     }
 
     func control(_ command: PlaybackCommand, pid: pid_t) -> Bool {
@@ -110,10 +158,18 @@ actor NeteaseBridge {
 
     private func controls(_ app: AXUIElement) -> [AXUIElement] {
         guard let bar = element(app, kAXMenuBarAttribute) else { return [] }
-        let titles = ["控制", "播放控制", "Controls", "Playback"]
-        guard let menuItem = item(named: titles, in: children(bar)),
-              let menu = children(menuItem).first else { return [] }
-        return children(menu)
+        let titles = ["控制", "播放控制", "播放器", "Controls", "Playback"]
+        let menus = children(bar)
+        if let menuItem = item(named: titles, in: menus), let menu = children(menuItem).first {
+            let items = children(menu)
+            if !items.isEmpty { return items }
+        }
+        for menuItem in menus {
+            guard let menu = children(menuItem).first else { continue }
+            let items = children(menu)
+            if item(named: Self.nextNames + Self.previousNames, in: items) != nil { return items }
+        }
+        return []
     }
 
     private func item(named names: [String], in items: [AXUIElement]) -> AXUIElement? {
@@ -124,9 +180,11 @@ actor NeteaseBridge {
     }
 
     private func playerView(_ app: AXUIElement) -> PlayerView? {
-        let windows = (attribute(app, kAXWindowsAttribute) as? [AXUIElement] ?? []).prefix(3)
-        for window in windows {
-            let candidates = nodes(window, depth: 5, budget: 130).filter {
+        let windows = attribute(app, kAXWindowsAttribute) as? [AXUIElement] ?? []
+        let primary = element(app, kAXMainWindowAttribute)
+        let ordered = primary.map { main in [main] + windows.filter { !CFEqual($0, main) } } ?? windows
+        for window in ordered.prefix(3) {
+            let candidates = nodes(window, depth: 6, budget: 200).filter {
                 guard attribute($0, kAXRoleAttribute) as? String == kAXGroupRole,
                       let size = size($0) else { return false }
                 return size.width >= 275 && (40...108).contains(size.height)
@@ -143,14 +201,17 @@ actor NeteaseBridge {
         var progress: Progress?
         var slider: Progress?
         var labels: [String] = []
+        var clocks: [Double] = []
         for node in nodes(root, depth: depth, budget: budget) {
             switch attribute(node, kAXRoleAttribute) as? String {
-            case kAXStaticTextRole, "AXLink":
+            case kAXStaticTextRole, kAXTextFieldRole, "AXLink":
                 let text = (attribute(node, kAXValueAttribute) as? String)
                     ?? (attribute(node, kAXTitleAttribute) as? String) ?? ""
                 let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
                 if let (position, duration) = Self.parseTimePair(trimmed) {
                     progress = .init(position: position, duration: duration, slider: nil)
+                } else if trimmed.contains(":"), let seconds = Self.parseClock(trimmed[...]) {
+                    clocks.append(seconds)
                 } else if !trimmed.isEmpty, trimmed.count <= 160, !labels.contains(trimmed) {
                     labels.append(trimmed)
                 }
@@ -163,6 +224,9 @@ actor NeteaseBridge {
                 }
             default: break
             }
+        }
+        if progress == nil, clocks.count == 2, clocks[1] > 0, clocks[0] <= clocks[1] {
+            progress = .init(position: clocks[0], duration: clocks[1], slider: nil)
         }
         if let progress {
             let matched = slider.flatMap { abs($0.duration - progress.duration) < 2 ? $0 : nil }
@@ -177,17 +241,18 @@ actor NeteaseBridge {
 
     static func parseTimePair(_ text: String) -> (Double, Double)? {
         let parts = text.split(separator: "/", omittingEmptySubsequences: false)
-        func seconds(_ value: Substring) -> Double? {
-            let chunks = value.trimmingCharacters(in: .whitespaces).split(separator: ":", omittingEmptySubsequences: false)
-            let numbers = chunks.compactMap { Int($0) }
-            guard chunks.count == numbers.count, (2...3).contains(numbers.count),
-                  numbers.allSatisfy({ (0...1440).contains($0) }), numbers.dropFirst().allSatisfy({ $0 < 60 })
-            else { return nil }
-            return Double(numbers.reduce(0) { $0 * 60 + $1 })
-        }
-        guard parts.count == 2, let position = seconds(parts[0]), let duration = seconds(parts[1]),
+        guard parts.count == 2, let position = parseClock(parts[0]), let duration = parseClock(parts[1]),
               duration > 0, duration <= 86400, (0...duration).contains(position) else { return nil }
         return (position, duration)
+    }
+
+    private static func parseClock(_ value: Substring) -> Double? {
+        let chunks = value.trimmingCharacters(in: .whitespaces).split(separator: ":", omittingEmptySubsequences: false)
+        let numbers = chunks.compactMap { Int($0) }
+        guard chunks.count == numbers.count, (2...3).contains(numbers.count),
+              numbers.allSatisfy({ (0...1440).contains($0) }), numbers.dropFirst().allSatisfy({ $0 < 60 })
+        else { return nil }
+        return Double(numbers.reduce(0) { $0 * 60 + $1 })
     }
 
     private func trackLabels(_ labels: [String]) -> (title: String, artist: String)? {
@@ -208,40 +273,51 @@ actor NeteaseBridge {
         return previous.playing
     }
 
-    private func historyTrack(matching view: PlayerView) -> CatalogTrack? {
+    private func historyTrack(matching view: PlayerView, history: [History]) -> CatalogTrack? {
+        let tracks = history.map(\.track)
+        let matches = tracks.filter { abs(Double($0.duration) / 1000 - view.progress.duration) <= 1.5 }
+        if let exact = matches.first(where: { view.labels.contains($0.name) }) { return exact }
+        if let newest = tracks.first, abs(Double(newest.duration) / 1000 - view.progress.duration) <= 1.5 {
+            return newest
+        }
+        return nil
+    }
+
+    private func readHistory() -> [History] {
         let home = FileManager.default.homeDirectoryForCurrentUser
         let locations = ["Library/Application Support/com.netease.163music/Documents/storage",
                          "Library/Containers/com.netease.163music/Data/Documents/storage"]
         for location in locations {
             let db = home.appending(path: location).appending(path: "sqlite_storage.sqlite3")
             guard FileManager.default.isReadableFile(atPath: db.path) else { continue }
-            let tracks = Self.recentTracks(db)
-            let matches = tracks.filter { abs(Double($0.duration) / 1000 - view.progress.duration) <= 1.5 }
-            if let exact = matches.first(where: { view.labels.contains($0.name) }) { return exact }
-            if let newest = tracks.first, abs(Double(newest.duration) / 1000 - view.progress.duration) <= 1.5 {
-                return newest
-            }
+            let rows = Self.history(db)
+            if !rows.isEmpty { return rows }
         }
-        return nil
+        return []
     }
 
-    static func recentTracks(_ url: URL) -> [CatalogTrack] {
+    static func recentTracks(_ url: URL) -> [CatalogTrack] { history(url).map(\.track) }
+
+    private static func history(_ url: URL) -> [History] {
         var handle: OpaquePointer?
         let status = sqlite3_open_v2(url.path, &handle, SQLITE_OPEN_READONLY | SQLITE_OPEN_NOMUTEX, nil)
         defer { if let handle { sqlite3_close(handle) } }
         guard status == SQLITE_OK, let handle else { return [] }
         sqlite3_busy_timeout(handle, 100)
         var statement: OpaquePointer?
-        let sql = "SELECT jsonStr FROM historyTracks ORDER BY playtime DESC LIMIT 8"
+        let sql = "SELECT jsonStr, playtime FROM historyTracks ORDER BY playtime DESC LIMIT 8"
         guard sqlite3_prepare_v2(handle, sql, -1, &statement, nil) == SQLITE_OK, let statement else { return [] }
         defer { sqlite3_finalize(statement) }
-        var result: [CatalogTrack] = []
+        var result: [History] = []
         while sqlite3_step(statement) == SQLITE_ROW {
             let count = Int(sqlite3_column_bytes(statement, 0))
             guard (1...500_000).contains(count), let bytes = sqlite3_column_blob(statement, 0),
                   let row = try? JSONDecoder().decode(CatalogTrack.self, from: Data(bytes: bytes, count: count)),
                   !row.name.isEmpty, row.duration > 0 else { continue }
-            result.append(row)
+            let timestamp = Double(sqlite3_column_int64(statement, 1))
+            let seconds = timestamp > 10_000_000_000 ? timestamp / 1000 : timestamp
+            let started = seconds > 0 ? Date(timeIntervalSince1970: seconds) : nil
+            result.append(.init(track: row, started: started))
         }
         return result
     }
@@ -302,15 +378,15 @@ actor NeteaseBridge {
     }
 
     private func nodes(_ root: AXUIElement, depth: Int, budget: Int) -> [AXUIElement] {
-        var queue = [(root, 0)]
-        var visited = 0
-        while visited < queue.count && queue.count < budget {
-            let (node, level) = queue[visited]
-            visited += 1
+        var stack = [(root, 0)]
+        var output: [AXUIElement] = []
+        let deadline = ContinuousClock.now + .milliseconds(420)
+        while let (node, level) = stack.popLast(), output.count < budget, ContinuousClock.now < deadline {
+            output.append(node)
             if level < depth {
-                queue.append(contentsOf: children(node).prefix(budget - queue.count).map { ($0, level + 1) })
+                stack.append(contentsOf: children(node).prefix(budget).map { ($0, level + 1) })
             }
         }
-        return queue.map { $0.0 }
+        return output
     }
 }

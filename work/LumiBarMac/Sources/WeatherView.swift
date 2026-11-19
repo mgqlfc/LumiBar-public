@@ -143,6 +143,7 @@ struct WeatherView: View {
         .background {
             RoundedRectangle(cornerRadius: 22).fill(appearance.tint(colorScheme))
         }
+        .clipShape(RoundedRectangle(cornerRadius: 22))
         .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 22))
         .padding(8)
         .frame(width: width, height: height, alignment: .top)
@@ -156,9 +157,9 @@ struct WeatherView: View {
         return VStack(spacing: 17) {
             HStack(alignment: .center, spacing: 8) {
                 WeatherIcon(code: weather.code, day: weather.isDay, size: 29)
-                    .background { weatherGlow(weather).frame(width: 142, height: 112).allowsHitTesting(false) }
+                    .background { weatherGlow(weather).frame(width: 210, height: 194).allowsHitTesting(false) }
                 Text(model.city?.name ?? "天气").font(.system(size: 17, weight: .semibold)).lineLimit(1)
-                Text(weather.conditionText ?? appearance.name).font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(1)
+                Text(weather.conditionText ?? appearance.name).font(.system(size: 12)).foregroundStyle(Color.primary.opacity(0.78)).lineLimit(1)
                 Text(degrees(weather.temperature) + (model.fahrenheit ? "F" : "C"))
                     .font(.system(size: 27, weight: .semibold)).monospacedDigit().fixedSize()
             }
@@ -183,10 +184,10 @@ struct WeatherView: View {
         VStack(spacing: 6) {
             HStack(spacing: 4) {
                 Image(systemName: symbol).foregroundStyle(accent)
-                Text(label).foregroundStyle(.secondary)
+                Text(label).foregroundStyle(Color.primary.opacity(0.78))
             }.font(.system(size: 12))
             Text(reading).font(.system(size: 24, weight: .semibold)).monospacedDigit()
-            Text(caption).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+            Text(caption).font(.system(size: 11)).foregroundStyle(Color.primary.opacity(0.78)).lineLimit(1)
         }.frame(maxWidth: .infinity)
     }
 

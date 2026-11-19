@@ -171,7 +171,7 @@ struct MusicView: View {
                 icon(track.playing ? "pause" : "play", track.playing ? "暂停" : "播放",
                      size: compact ? 33 : 41, glass: true) { model.control(.toggle) }
                 icon("forward.end", "下一首", size: 27) { model.control(.next) }
-            }
+            }.disabled(!track.canControl)
         }
     }
 
@@ -324,7 +324,7 @@ private struct PlaybackProgress: View {
                     }
                 }
                 .accessibilityLabel("播放进度").tint(tint).disabled(track.duration <= 0 || !track.canSeek)
-                Text("\(timeLabel(dragPosition ?? position)) / \(timeLabel(track.duration))")
+                Text((track.estimatedPosition ? "≈ " : "") + "\(timeLabel(dragPosition ?? position)) / \(timeLabel(track.duration))")
             }.font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
         }
     }

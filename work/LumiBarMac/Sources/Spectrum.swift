@@ -3,6 +3,61 @@ import CoreAudio
 import Foundation
 import Synchronization
 
+enum AudioPlayback {
+    static func object(for pid: pid_t) -> AudioObjectID? {
+        var pid = pid
+        var process = AudioObjectID(kAudioObjectUnknown)
+        var size = UInt32(MemoryLayout<AudioObjectID>.size)
+        var address = property(kAudioHardwarePropertyTranslatePIDToProcessObject)
+        guard AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &address,
+                                         UInt32(MemoryLayout<pid_t>.size), &pid, &size, &process) == noErr,
+              process != kAudioObjectUnknown else { return nil }
+        return process
+    }
+
+    static func applicationObjects(pid: pid_t, bundleID: String) -> [AudioObjectID] {
+        let main = object(for: pid)
+        var propertySize: UInt32 = 0
+        var address = property(kAudioHardwarePropertyProcessObjectList)
+        let system = AudioObjectID(kAudioObjectSystemObject)
+        guard AudioObjectGetPropertyDataSize(system, &address, 0, nil, &propertySize) == noErr,
+              propertySize > 0 else { return main.map { [$0] } ?? [] }
+        let count = Int(propertySize) / MemoryLayout<AudioObjectID>.stride
+        var processes = [AudioObjectID](repeating: 0, count: count)
+        let status = processes.withUnsafeMutableBytes {
+            AudioObjectGetPropertyData(system, &address, 0, nil, &propertySize, $0.baseAddress!)
+        }
+        guard status == noErr else { return main.map { [$0] } ?? [] }
+        let matching = processes.filter { process in
+            if let main, process == main { return true }
+            guard let id = identifier(process) else { return false }
+            return id == bundleID || id.hasPrefix(bundleID + ".")
+        }
+        return matching.isEmpty ? main.map { [$0] } ?? [] : matching
+    }
+
+    static func hasOutput(_ processes: [AudioObjectID]) -> Bool {
+        processes.contains { process in
+            var value: UInt32 = 0
+            var size = UInt32(MemoryLayout<UInt32>.size)
+            var address = property(kAudioProcessPropertyIsRunningOutput)
+            return AudioObjectGetPropertyData(process, &address, 0, nil, &size, &value) == noErr && value == 1
+        }
+    }
+
+    private static func identifier(_ process: AudioObjectID) -> String? {
+        var value: Unmanaged<CFString>?
+        var size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
+        var address = property(kAudioProcessPropertyBundleID)
+        guard AudioObjectGetPropertyData(process, &address, 0, nil, &size, &value) == noErr else { return nil }
+        return value.map { $0.takeRetainedValue() as String }
+    }
+
+    private static func property(_ selector: AudioObjectPropertySelector) -> AudioObjectPropertyAddress {
+        .init(mSelector: selector, mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
+    }
+}
+
 @MainActor
 final class Spectrum {
     private var tap = AudioObjectID(kAudioObjectUnknown)
@@ -13,26 +68,21 @@ final class Spectrum {
 
     var levels: [Double] { analyzer?.levels ?? Array(repeating: 0, count: 8) }
 
-    func start(pid: pid_t) -> Bool {
+    func start(pid: pid_t, bundleID: String) -> Bool {
         stop()
-        var pid = pid
-        var process: AudioObjectID = 0
-        var size = UInt32(MemoryLayout<AudioObjectID>.size)
-        var address = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyTranslatePIDToProcessObject,
-                                                mScope: kAudioObjectPropertyScopeGlobal,
-                                                mElement: kAudioObjectPropertyElementMain)
-        guard AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &address,
-                                         UInt32(MemoryLayout<pid_t>.size), &pid, &size, &process) == noErr,
-              process != kAudioObjectUnknown else { return false }
-        let description = CATapDescription(monoMixdownOfProcesses: [process])
+        let processes = AudioPlayback.applicationObjects(pid: pid, bundleID: bundleID)
+        guard !processes.isEmpty else { return false }
+        let description = CATapDescription(monoMixdownOfProcesses: processes)
         description.name = "LumiBar Spectrum"
         description.isPrivate = true
         description.muteBehavior = .unmuted
         guard AudioHardwareCreateProcessTap(description, &tap) == noErr else { return false }
 
         var format = AudioStreamBasicDescription()
-        size = UInt32(MemoryLayout<AudioStreamBasicDescription>.size)
-        address.mSelector = kAudioTapPropertyFormat
+        var size = UInt32(MemoryLayout<AudioStreamBasicDescription>.size)
+        var address = AudioObjectPropertyAddress(mSelector: kAudioTapPropertyFormat,
+                                                mScope: kAudioObjectPropertyScopeGlobal,
+                                                mElement: kAudioObjectPropertyElementMain)
         guard AudioObjectGetPropertyData(tap, &address, 0, nil, &size, &format) == noErr,
               format.mFormatID == kAudioFormatLinearPCM, format.mFormatFlags & kAudioFormatFlagIsFloat != 0,
               format.mBitsPerChannel == 32, format.mChannelsPerFrame == 1,

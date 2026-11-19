@@ -253,7 +253,7 @@ final class MusicModel {
     }
 
     func control(_ command: PlaybackCommand) {
-        guard let track, commandTask == nil else { return }
+        guard let track, track.canControl, commandTask == nil else { return }
         commandTask = Task {
             if track.player == .netease {
                 let success = await NeteaseBridge.shared.control(command, pid: track.pid)
@@ -300,15 +300,19 @@ final class MusicModel {
         for player in Player.allCases where !deniedPlayers.contains(player) {
             guard let running = NSRunningApplication.runningApplications(withBundleIdentifier: player.rawValue).first else { continue }
             if player == .netease {
-                if AXIsProcessTrusted() {
-                    if let netease = await NeteaseBridge.shared.read(pid: running.processIdentifier) {
-                        candidates.append(netease)
-                        neteaseStatus = nil
-                    } else if neteaseStatus == nil {
-                        neteaseStatus = "请打开网易云音乐的主窗口并播放一首歌。"
+                let trusted = AXIsProcessTrusted()
+                if let netease = await NeteaseBridge.shared.read(pid: running.processIdentifier, trusted: trusted) {
+                    candidates.append(netease)
+                    if !trusted {
+                        neteaseStatus = "已识别当前曲目。允许「辅助功能」后可使用播放控件。"
+                    } else if netease.estimatedPosition {
+                        neteaseStatus = "已连接网易云音乐，正在使用估算进度。"
+                    } else {
+                        neteaseStatus = "已连接网易云音乐。"
                     }
-                } else if neteaseStatus == nil {
-                    neteaseStatus = "网易云音乐已打开。连接时需要允许辅助功能。"
+                } else {
+                    neteaseStatus = trusted ? "已授权，等待网易云主窗口的当前曲目。"
+                                           : "网易云音乐已打开。连接播放控件时需要允许辅助功能。"
                 }
                 continue
             }
@@ -393,8 +397,8 @@ final class MusicModel {
             return
         }
         lastSpectrumPID = pid
-        if let pid {
-            audioError = spectrum.start(pid: pid) ? nil : "频谱未能启动，请检查「屏幕与系统录音」权限。"
+        if let pid, let track {
+            audioError = spectrum.start(pid: pid, bundleID: track.player.rawValue) ? nil : "频谱未能启动，请检查「屏幕与系统录音」权限。"
         } else {
             spectrum.stop()
         }

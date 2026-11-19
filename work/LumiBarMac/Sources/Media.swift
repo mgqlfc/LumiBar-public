@@ -30,6 +30,8 @@ struct Track: Equatable, Sendable {
     let observedAt: Date
     var catalogID: String? = nil
     var canSeek = true
+    var canControl = true
+    var estimatedPosition = false
     var key: String {
         if player == .netease, let catalogID { return player.rawValue + "|" + catalogID }
         return [player.rawValue, title, artist, album, String(Int(duration))].joined(separator: "|")
