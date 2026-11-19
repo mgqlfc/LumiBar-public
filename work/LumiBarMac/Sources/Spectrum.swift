@@ -100,13 +100,7 @@ final class Spectrum {
                                               kAudioSubTapDriftCompensationKey: true]]
         ]
         guard AudioHardwareCreateAggregateDevice(properties as CFDictionary, &device) == noErr,
-              AudioDeviceCreateIOProcIDWithBlock(&callback, device, nil, { _, input, _, _, _ in
-                  let buffers = UnsafeMutableAudioBufferListPointer(UnsafeMutablePointer(mutating: input))
-                  for buffer in buffers {
-                      guard let samples = buffer.mData?.assumingMemoryBound(to: Float.self) else { continue }
-                      analyzer.add(UnsafeBufferPointer(start: samples, count: Int(buffer.mDataByteSize) / 4))
-                  }
-              }) == noErr,
+              AudioDeviceCreateIOProcIDWithBlock(&callback, device, nil, Self.audioCallback(analyzer)) == noErr,
               let callback, AudioDeviceStart(device, callback) == noErr else {
             stop()
             return false
@@ -114,6 +108,17 @@ final class Spectrum {
         self.analyzer = analyzer
         running = true
         return true
+    }
+
+    // Core Audio invokes this block on the device's realtime thread.
+    private nonisolated static func audioCallback(_ analyzer: Analyzer) -> AudioDeviceIOBlock {
+        { _, input, _, _, _ in
+            let buffers = UnsafeMutableAudioBufferListPointer(UnsafeMutablePointer(mutating: input))
+            for buffer in buffers {
+                guard let samples = buffer.mData?.assumingMemoryBound(to: Float.self) else { continue }
+                analyzer.add(UnsafeBufferPointer(start: samples, count: Int(buffer.mDataByteSize) / 4))
+            }
+        }
     }
 
     func stop() {

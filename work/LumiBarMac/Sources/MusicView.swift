@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct MusicView: View {
-    enum Surface { case leading, trailing, capsule, expanded }
+    enum Surface { case capsule, expanded }
     let model: MusicModel
     let appearance: AppearanceModel
     let surface: Surface
@@ -12,10 +12,6 @@ struct MusicView: View {
     var body: some View {
         if let track = model.track {
             switch surface {
-            case .leading:
-                compact { cover(size: 23) }
-            case .trailing:
-                compact { bars(width: 42) }
             case .capsule:
                 compact {
                     HStack(spacing: 8) {
@@ -38,16 +34,11 @@ struct MusicView: View {
         .foregroundStyle(.white)
         .background {
             let shape = Capsule()
-            if surface == .capsule {
-                shape.fill(Color(white: 0.10))
-                albumLight(shape, opacity: 0.57)
-                spectrumBars(height: 24, opacity: 0.41)
-                    .padding(.leading, 43).padding(.trailing, 7)
-                    .frame(maxHeight: .infinity, alignment: .bottom).clipShape(shape)
-            } else {
-                shape.fill(.black)
-                albumLight(shape, opacity: 0.36)
-            }
+            shape.fill(Color(white: 0.10))
+            albumLight(shape, opacity: 0.57)
+            spectrumBars(height: 24, opacity: 0.41)
+                .padding(.leading, 43).padding(.trailing, 7)
+                .frame(maxHeight: .infinity, alignment: .bottom).clipShape(shape)
         }
         .accessibilityLabel(model.mode == .lyrics ? "收起歌词" : "展开歌词")
     }
@@ -202,10 +193,6 @@ struct MusicView: View {
             .accessibilityHidden(true)
     }
 
-    private func bars(width: CGFloat) -> some View {
-        spectrumBars(height: 16, opacity: 0.85, count: 13)
-            .frame(width: width, height: 16)
-    }
 
     private func spectrumBars(height: CGFloat, opacity: Double, count: Int = 40) -> some View {
         let enabled = model.spectrumEnabled && model.track?.playing == true

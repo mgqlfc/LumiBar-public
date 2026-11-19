@@ -77,8 +77,6 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
     private lazy var music = MusicModel(defaults: defaults)
     private let status = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let weatherPanel = SurfacePanel()
-    private let leadingPanel = SurfacePanel()
-    private let trailingPanel = SurfacePanel()
     private let capsulePanel = SurfacePanel()
     private let expandedPanel = SurfacePanel()
     private var settings: NSWindow?
@@ -109,8 +107,7 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
         }
         music.onTrackChange = { [weak self] in self?.layoutMusic() }
 
-        for (panel, surface) in [(leadingPanel, MusicView.Surface.leading), (trailingPanel, .trailing),
-                                 (capsulePanel, .capsule), (expandedPanel, .expanded)] {
+        for (panel, surface) in [(capsulePanel, MusicView.Surface.capsule), (expandedPanel, .expanded)] {
             panel.contentView = NSHostingView(rootView: MusicView(model: music, appearance: appearance, surface: surface) { [weak self] in
                 self?.toggleLyrics()
             })
@@ -269,7 +266,7 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
         }
     }
 
-    private var musicPanels: [NSPanel] { [leadingPanel, trailingPanel, capsulePanel, expandedPanel] }
+    private var musicPanels: [NSPanel] { [capsulePanel, expandedPanel] }
 
     @objc private func pointerTick() {
         let pointer = NSEvent.mouseLocation
@@ -334,35 +331,26 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
             return
         }
         let frame = screen.frame
-        let leading = screen.auxiliaryTopLeftArea
-        let trailing = screen.auxiliaryTopRightArea
-        let hasNotch = screen.safeAreaInsets.top > 0 && leading != nil && trailing != nil
-        var anchorX = frame.midX
-        let top = frame.maxY - max(2, screen.safeAreaInsets.top)
-        if hasNotch, let leading, let trailing {
-            capsulePanel.orderOut(nil)
-            anchorX = (leading.maxX + trailing.minX) / 2
-            let height = min(27, leading.height - 4, trailing.height - 4)
-            if height >= 19 && leading.width >= 57 && trailing.width >= 57 {
-                let y = top + (screen.safeAreaInsets.top - height) / 2
-                leadingPanel.present(.init(x: leading.maxX - 47, y: y, width: 44, height: height))
-                trailingPanel.present(.init(x: trailing.minX + 3, y: y, width: 52, height: height))
-            } else {
-                leadingPanel.orderOut(nil)
-                trailingPanel.orderOut(nil)
-                capsulePanel.present(.init(x: anchorX - 119, y: top - 39, width: 238, height: 34))
-            }
+        let anchorX = if let left = screen.auxiliaryTopLeftArea,
+                         let right = screen.auxiliaryTopRightArea, screen.safeAreaInsets.top > 0 {
+            (left.maxX + right.minX) / 2
         } else {
-            leadingPanel.orderOut(nil)
-            trailingPanel.orderOut(nil)
-            let menuBottom = min(frame.maxY - 6, screen.visibleFrame.maxY)
-            capsulePanel.present(.init(x: frame.midX - 119, y: menuBottom - 40, width: 238, height: 34))
+            frame.midX
         }
+        let menuHeight = max(NSStatusBar.system.thickness, screen.safeAreaInsets.top)
+        let menuBottom = min(frame.maxY - menuHeight, screen.visibleFrame.maxY)
+        // The menu bar itself belongs to WindowServer. Mount the capsule
+        // immediately under its lower edge, including on a notched display.
+        let capsuleTop = menuBottom - 8
+        let capsuleWidth: CGFloat = 238
+        let capsuleHeight: CGFloat = 34
+        capsulePanel.present(.init(x: anchorX - capsuleWidth / 2, y: capsuleTop - capsuleHeight,
+                                   width: capsuleWidth, height: capsuleHeight))
         if music.mode == .compact {
             expandedPanel.orderOut(nil)
         } else {
             let width: CGFloat = music.mode == .lyrics ? 432 : 342
-            let y = hasNotch && !capsulePanel.isVisible ? top + 3 : capsulePanel.frame.minY + 2
+            let y = capsulePanel.frame.minY + 2
             let height = music.mode == .lyrics ? min(658, max(300, y - screen.visibleFrame.minY - 5)) : 78
             expandedPanel.appearance = appearance.windowAppearance
             expandedPanel.present(.init(x: anchorX - width / 2, y: y - height, width: width, height: height))
