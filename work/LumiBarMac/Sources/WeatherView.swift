@@ -1,4 +1,3 @@
-import Charts
 import SwiftUI
 
 @MainActor
@@ -58,7 +57,7 @@ enum WeatherGlyph {
     }
 }
 
-private struct WeatherIcon: View {
+struct WeatherIcon: View {
     let code: Int
     var day: Bool? = nil
     let size: CGFloat
@@ -83,7 +82,9 @@ struct WeatherView: View {
     let appearance: AppearanceModel
     let compact: Bool
     let width: CGFloat
-    let height: CGFloat
+    let height: CGFloat?
+    var referenceDate: Date? = nil
+    var measured: (CGFloat) -> Void = { _ in }
     var showSettings: () -> Void
     var quit: () -> Void
     @ViewState private var searching = false
@@ -94,33 +95,26 @@ struct WeatherView: View {
     @ViewState private var moreDays = false
     @ViewState private var showSources = false
     @ViewState private var selectedAlert: Weather.Alert?
+    @ViewState private var allAlerts = false
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        Group {
+        GeometryReader { geometry in
             if compact {
-                VStack(spacing: 12) {
-                    if let weather = model.weather {
-                        hoverSummary(weather)
-                    } else {
-                        Text(model.city?.name ?? "LumiBar 天气").font(.headline)
-                        Text(model.error ?? (model.loading ? "正在更新天气…" : "点击选择城市"))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .padding(.horizontal, 22).padding(.vertical, 17)
-                .frame(width: width - 16)
+                hoverBody
+                    .frame(width: max(1, width - 32), height: max(1, geometry.size.height - 32))
+                    .modifier(FlyoutChrome(appearance: appearance))
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 8) {
                         header
-                        citySwitcher
+                        citySwitcher.padding(.top, 3).padding(.bottom, 10)
                         if searching || model.city == nil { search }
                         if let message = model.locationError ?? model.error {
                             Text(message).font(.caption).foregroundStyle(.secondary)
                         }
                         if let weather = model.weather {
-                            if let date = WeatherAPI.date(weather.updated), Date.now.timeIntervalSince(date) > 7200 {
+                            if let date = WeatherAPI.date(weather.updated), now.timeIntervalSince(date) > 7200 {
                                 Label("显示上次保存的天气，请刷新。", systemImage: "clock.badge.exclamationmark")
                                     .font(.caption).foregroundStyle(.secondary)
                             }
@@ -135,66 +129,71 @@ struct WeatherView: View {
                     }
                     .padding(.horizontal, 22).padding(.vertical, 16)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { value in measured(value + 32) }
                 }
                 .scrollIndicators(.hidden)
-                .frame(width: width - 16, height: height - 16)
+                .frame(width: max(1, width - 32), height: max(1, geometry.size.height - 32))
+                .modifier(FlyoutChrome(appearance: appearance))
             }
         }
-        .background {
-            RoundedRectangle(cornerRadius: 22).fill(appearance.tint(colorScheme))
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 22))
-        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 22))
-        .padding(8)
         .frame(width: width, height: height, alignment: .top)
         .onDisappear { searchTask?.cancel() }
+    }
+
+    private var now: Date { referenceDate ?? .now }
+
+    private var hoverBody: some View {
+        Group {
+            if let weather = model.weather {
+                hoverSummary(weather)
+            } else {
+                VStack(spacing: 8) {
+                    Text(model.city?.name ?? "LumiBar 天气").font(.headline)
+                    Text(model.error ?? (model.loading ? "正在更新天气…" : "点击选择城市"))
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(.leading, 14.5).padding(.trailing, 17.5).padding(.vertical, 16)
     }
 
     private var accent: Color { appearance.accent.color }
 
     private func hoverSummary(_ weather: Weather) -> some View {
-        let appearance = Weather.appearance(weather.code, day: weather.isDay)
-        return VStack(spacing: 17) {
-            HStack(alignment: .center, spacing: 8) {
-                WeatherIcon(code: weather.code, day: weather.isDay, size: 29)
-                    .background { weatherGlow(weather).frame(width: 210, height: 194).allowsHitTesting(false) }
-                Text(model.city?.name ?? "天气").font(.system(size: 17, weight: .semibold)).lineLimit(1)
-                Text(weather.conditionText ?? appearance.name).font(.system(size: 12)).foregroundStyle(Color.primary.opacity(0.78)).lineLimit(1)
-                Text(degrees(weather.temperature) + (model.fahrenheit ? "F" : "C"))
-                    .font(.system(size: 27, weight: .semibold)).monospacedDigit().fixedSize()
-            }
-            HStack(alignment: .top, spacing: 5) {
+        let condition = Weather.appearance(weather.code, day: weather.isDay)
+        return VStack(spacing: 7) {
+            HStack(alignment: .center, spacing: 6) {
+                WeatherIcon(code: weather.code, day: weather.isDay, size: 30)
+                    .background { weatherGlow(weather).frame(width: 194, height: 190).allowsHitTesting(false) }
+                appearance.styledText(model.city?.name ?? "天气", size: 15, weight: .semibold).lineLimit(1)
+                appearance.styledText(weather.conditionText ?? condition.name, size: 11)
+                    .foregroundStyle(.secondary).lineLimit(1)
+                appearance.styledText(degrees(weather.temperature) + (model.fahrenheit ? "F" : "C"),
+                                      size: 24, weight: .semibold).fixedSize()
+            }.frame(height: 40)
+            HStack(alignment: .top, spacing: 10) {
                 hoverReading("体感", degrees(weather.feelsLike), "当前", "thermometer.medium")
-                hoverReading("降水", hoverRain(weather), "未来 1 小时", "cloud.rain.fill")
+                hoverReading("降水", weather.rain.map { decimal($0) + "%" } ?? "—", "未来 1 小时", nil)
                 hoverReading("空气", weather.aqi.map { decimal($0) } ?? "—", weather.aqiCaption, "leaf")
             }
         }
     }
 
-    private func hoverRain(_ weather: Weather) -> String {
-        if let probability = weather.rain { return decimal(probability) + "%" }
-        if let rain = weather.shortTermPrecipitation {
-            let amounts = rain.nextHour().compactMap(\.amountMm)
-            if !amounts.isEmpty { return amounts.allSatisfy { $0 == 0 } ? "0%" : "有雨" }
-        }
-        return "—"
-    }
-
-    private func hoverReading(_ label: String, _ reading: String, _ caption: String, _ symbol: String) -> some View {
-        VStack(spacing: 6) {
+    private func hoverReading(_ label: String, _ reading: String, _ caption: String, _ symbol: String?) -> some View {
+        VStack(spacing: 3) {
             HStack(spacing: 4) {
-                Image(systemName: symbol).foregroundStyle(accent)
-                Text(label).foregroundStyle(Color.primary.opacity(0.78))
-            }.font(.system(size: 12))
-            Text(reading).font(.system(size: 24, weight: .semibold)).monospacedDigit()
-            Text(caption).font(.system(size: 11)).foregroundStyle(Color.primary.opacity(0.78)).lineLimit(1)
+                if let symbol { Image(systemName: symbol).font(.system(size: 11, weight: .light)).foregroundStyle(accent) }
+                else { WeatherIcon(code: 61, day: true, size: 13) }
+                appearance.styledText(label, size: 11).foregroundStyle(.secondary)
+            }.frame(height: 18)
+            appearance.styledText(reading, size: 22, weight: .semibold).frame(height: 31)
+            appearance.styledText(caption, size: 10).foregroundStyle(.secondary).lineLimit(1).frame(height: 17)
         }.frame(maxWidth: .infinity)
     }
 
     private var header: some View {
         HStack(alignment: .firstTextBaseline, spacing: 9) {
-            Text(model.city?.name ?? "你的天气")
-                .font(.system(size: 24, weight: .semibold)).lineLimit(1)
+            appearance.styledText(model.city?.name ?? "你的天气", size: 24, weight: .semibold).lineLimit(1)
                 .layoutPriority(2)
             if let weather = model.weather {
                 Button(weather.source) { showSources.toggle() }
@@ -210,7 +209,7 @@ struct WeatherView: View {
                         }.padding(16).frame(maxWidth: 300, alignment: .leading)
                     }
             }
-            Text(weatherStatus).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+            appearance.styledText(weatherStatus, size: 11).foregroundStyle(.secondary).lineLimit(1)
             Spacer(minLength: 0)
             iconButton("arrow.clockwise", "更新天气") { model.refresh() }.disabled(model.city == nil || model.loading)
             Menu {
@@ -234,7 +233,7 @@ struct WeatherView: View {
         if model.loading { return "正在更新…" }
         if model.error != nil { return "更新失败" }
         if let updated = (model.weather?.updated).flatMap(WeatherAPI.date) {
-            return "上次更新  " + updated.formatted(.dateTime.hour().minute())
+            return referenceDate == nil ? "上次更新：" + updated.formatted(.dateTime.hour().minute()) : "上次更新：12:00"
         }
         return ""
     }
@@ -281,6 +280,12 @@ struct WeatherView: View {
     private func runSearch() {
         let query = term.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else { return }
+        if model.isPreview {
+            results = ([model.city].compactMap { $0 } + model.favorites).uniqued()
+                .filter { $0.name.localizedCaseInsensitiveContains(query) }
+            searchError = results.isEmpty ? "没有匹配的样例城市。" : nil
+            return
+        }
         searchTask?.cancel()
         searchError = "正在搜索…"
         results = []
@@ -297,7 +302,8 @@ struct WeatherView: View {
     }
 
     private var citySwitcher: some View {
-        let cities = (model.favorites + Array([model.city].compactMap { $0 })).uniqued()
+        let current = model.usingLocation ? [] : [model.city].compactMap { $0 }
+        let cities = (model.favorites + current).uniqued()
         return ScrollView(.horizontal) {
             HStack(spacing: 6) {
                 Button { model.locate() } label: {
@@ -330,29 +336,21 @@ struct WeatherView: View {
 
     private func current(_ weather: Weather) -> some View {
         let condition = Weather.appearance(weather.code, day: weather.isDay)
-        return HStack(spacing: compact ? 12 : 16) {
-            WeatherIcon(code: weather.code, day: weather.isDay, size: compact ? 46 : 68)
-                .background {
-                    weatherGlow(weather)
-                        .frame(width: 190, height: 156)
-                        .allowsHitTesting(false)
-                }
-            Text(degrees(weather.temperature) + (compact ? "" : model.fahrenheit ? "F" : "C"))
-                .font(.system(size: compact ? 39 : 52, weight: .regular))
-                .monospacedDigit()
-                .fixedSize()
-                .accessibilityLabel("实况温度 " + degrees(weather.temperature))
+        return HStack(spacing: 12) {
+            WeatherIcon(code: weather.code, day: weather.isDay, size: 68)
+                .background { weatherGlow(weather).frame(width: 215, height: 194).allowsHitTesting(false) }
+            appearance.styledText(degrees(weather.temperature) + (model.fahrenheit ? "F" : "C"), size: 52)
+                .fixedSize().accessibilityLabel("实况温度 " + degrees(weather.temperature))
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 4) {
-                    Text(compact ? (model.city?.name ?? condition.name) : (weather.conditionText ?? condition.name))
-                        .font(.system(size: compact ? 15 : 18)).lineLimit(1)
-                    if !compact { alertBadges(weather) }
+                    appearance.styledText(weather.conditionText ?? condition.name, size: 18).lineLimit(1)
+                    alertBadges(weather)
                 }
-                if let today = weather.days.first, !compact {
-                    Text("最低 \(degrees(today.min))  最高 \(degrees(today.max)) · 体感 \(degrees(weather.feelsLike))")
-                        .font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(1).minimumScaleFactor(0.76)
+                if let today = weather.days.first {
+                    appearance.styledText("最低 \(degrees(today.min))  最高 \(degrees(today.max)) · 体感 \(degrees(weather.feelsLike))", size: 12)
+                        .foregroundStyle(.secondary).lineLimit(1).minimumScaleFactor(0.76)
                 } else {
-                    Text("体感 \(degrees(weather.feelsLike))").font(.subheadline).foregroundStyle(.secondary)
+                    appearance.styledText("体感 \(degrees(weather.feelsLike))", size: 12).foregroundStyle(.secondary)
                 }
             }
             Spacer(minLength: 0)
@@ -360,33 +358,21 @@ struct WeatherView: View {
     }
 
     private func weatherGlow(_ weather: Weather) -> some View {
-        let tones: (UInt32, UInt32) = switch weather.code {
-        case -2: (0xE0A957, 0xB77D45)
-        case -1: (0xB4A47E, 0x97A2A5)
-        case 95...99: (0xA579EA, 0x5790EE)
-        case 71...77, 85...86: (0x7DD3EE, 0xABB8EA)
-        case 45, 48: (0x8EB8CF, 0x97BFD0)
-        case 51...67, 80...82: (0x41B5EF, 0x4886DB)
-        case 3: (0x88BADD, 0x7CA7CB)
-        case 2 where weather.isDay != false: (0xFACA71, 0x97CAE1)
-        default: weather.isDay == false ? (0x557DF4, 0x938BEB) : (0xFFCA5B, 0xFFAD4E)
-        }
-        let strength = colorScheme == .dark ? 0.29 : 0.21
-        func color(_ value: UInt32) -> Color {
-            Color(red: Double((value >> 16) & 255) / 255,
-                  green: Double((value >> 8) & 255) / 255, blue: Double(value & 255) / 255)
-        }
+        let tones = WeatherLight.colors(code: weather.code, day: weather.isDay)
+        let strength = colorScheme == .dark ? 0.29 : 0.18
         return ZStack {
-            RadialGradient(colors: [color(tones.1).opacity(strength * 0.58), .clear],
-                           center: UnitPoint(x: 0.58, y: 0.48), startRadius: 2, endRadius: 95)
-            RadialGradient(colors: [color(tones.0).opacity(strength), .clear],
-                           center: .center, startRadius: 3, endRadius: 73)
+            RadialGradient(colors: [tones.1.opacity(strength * 0.58), .clear],
+                           center: UnitPoint(x: 0.54, y: 0.49), startRadius: 2, endRadius: 89)
+            RadialGradient(colors: [tones.0.opacity(strength), .clear],
+                           center: .center, startRadius: 3, endRadius: 72)
         }
     }
 
     private func alertBadges(_ weather: Weather) -> some View {
-        let visible = Array(weather.currentAlerts.prefix(2))
-        return ForEach(visible) { alert in
+        let alerts = weather.currentAlerts(at: now)
+        let visible = Array(alerts.prefix(2))
+        return HStack(spacing: 4) {
+        ForEach(visible) { alert in
             Button {
                 selectedAlert = alert
             } label: {
@@ -416,65 +402,94 @@ struct WeatherView: View {
                 }.frame(width: 300, height: 220)
             }
         }
+        if alerts.count > visible.count {
+            Button("+\(alerts.count - visible.count)") { allAlerts = true }
+                .buttonStyle(.plain).font(.caption2)
+                .accessibilityLabel("查看所有天气预警")
+                .popover(isPresented: $allAlerts) {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 12) {
+                            ForEach(alerts) { alert in
+                                Text(alert.headline).font(.headline)
+                                Text(alert.description).font(.subheadline)
+                                if !alert.instruction.isEmpty { Text(alert.instruction).font(.subheadline) }
+                            }
+                        }.padding(14).frame(maxWidth: .infinity, alignment: .leading)
+                    }.frame(width: 320, height: 260)
+                }
+        }
+        }
     }
 
     private func rainTrend(_ weather: Weather) -> some View {
         let series = weather.shortTermPrecipitation
-        let now = Date.now
+        let now = self.now
         let items = series?.nextHour(at: now) ?? []
         let peak = max(2, items.compactMap(\.amountMm).max() ?? 0)
-        let chart = Chart {
-            ForEach(Array(items.enumerated()), id: \.offset) { _, item in
-                if let end = WeatherAPI.date(item.end), let amount = item.amountMm {
-                    let minutes = min(60, max(0, end.timeIntervalSince(now) / 60))
-                    AreaMark(x: .value("分钟", minutes), y: .value("降水", amount))
-                        .interpolationMethod(.monotone)
-                        .foregroundStyle(.linearGradient(colors: [accent.opacity(0.28), .clear], startPoint: .top, endPoint: .bottom))
-                    LineMark(x: .value("分钟", minutes), y: .value("降水", amount))
-                        .interpolationMethod(.monotone).foregroundStyle(accent)
-                }
-            }
-        }
-        .chartXScale(domain: 0.0...60.0)
-        .chartYScale(domain: 0.0...peak)
-        .chartXAxis {
-            AxisMarks(values: [0.0, 30.0, 60.0]) { tick in
-                AxisValueLabel {
-                    Text(tick.as(Double.self) == 0 ? "现在" : "\(Int(tick.as(Double.self) ?? 0)) 分钟").font(.system(size: 9))
-                }
-            }
-        }
-        .chartYAxis {
-            AxisMarks(position: .leading, values: [0, peak / 2, peak]) { tick in
-                AxisGridLine()
-                AxisValueLabel {
-                    Text(tick.as(Double.self)?.formatted(.number.precision(.fractionLength(0...1))) ?? "")
-                        .font(.system(size: 9))
-                }
-            }
-        }
-        .overlay {
-            if items.isEmpty { Text("暂无数据").font(.caption2).foregroundStyle(.secondary) }
-            else if items.contains(where: { $0.amountMm == nil }) {
-                Text("数据不完整").font(.caption2).foregroundStyle(.secondary)
-            }
-        }
-        return HStack(alignment: .top, spacing: 12) {
-            VStack(alignment: .leading, spacing: 5) {
-                Text("未来 1 小时降水").font(.system(size: 15, weight: .semibold))
-                Text(series?.precisionNote ?? "短时预报").font(.system(size: 10)).foregroundStyle(.secondary)
+        return HStack(alignment: .top, spacing: 13) {
+            VStack(alignment: .leading, spacing: 6) {
+                appearance.styledText("未来 1 小时降水", size: 15, weight: .semibold)
+                appearance.styledText(series?.precisionNote ?? "短时预报", size: 10).foregroundStyle(.secondary)
                     .lineLimit(2)
             }
             .frame(width: 144, alignment: .leading)
-            chart.frame(height: 74).overlay(alignment: .topLeading) {
-                Text("mm").font(.system(size: 9)).foregroundStyle(.secondary).offset(y: -2)
-            }
+            Canvas { context, size in
+                let left: CGFloat = 28, top: CGFloat = 22, bottom: CGFloat = 57
+                let width = max(1, size.width - left - 3)
+                let label = Color.secondary
+                for tick in 0...2 {
+                    let fraction = Double(tick) / 2
+                    let y = bottom - fraction * (bottom - top)
+                    var grid = Path()
+                    grid.move(to: CGPoint(x: left, y: y))
+                    grid.addLine(to: CGPoint(x: left + width, y: y))
+                    context.stroke(grid, with: .color(.secondary.opacity(0.16)), lineWidth: 1)
+                    context.draw(appearance.styledText(decimal(peak * fraction, digits: 0), size: 9).foregroundStyle(label),
+                                 at: CGPoint(x: 0, y: y), anchor: .leading)
+                }
+                context.draw(appearance.styledText("mm", size: 9).foregroundStyle(label), at: CGPoint(x: 0, y: 5), anchor: .leading)
+                for (fraction, text, anchor) in [(0.0, "现在", UnitPoint.leading), (0.5, "30 分钟", .center), (1.0, "60 分钟", .trailing)] {
+                    context.draw(appearance.styledText(text, size: 9).foregroundStyle(label),
+                                 at: CGPoint(x: left + fraction * width, y: 67), anchor: anchor)
+                }
+                let points = items.compactMap { item -> CGPoint? in
+                    guard let date = WeatherAPI.date(item.end), let amount = item.amountMm else { return nil }
+                    let fraction = min(1, max(0, date.timeIntervalSince(now) / 3600))
+                    return CGPoint(x: left + fraction * width, y: bottom - amount / peak * (bottom - top))
+                }
+                if points.isEmpty || points.count != items.count {
+                    let message = items.isEmpty ? "暂无数据" : "数据不完整"
+                    context.draw(appearance.styledText(message, size: 10).foregroundStyle(label),
+                                 at: CGPoint(x: left + width * 0.5, y: 39))
+                } else if let first = points.first, let last = points.last {
+                    let curve = smoothCurve(points)
+                    var area = curve
+                    area.addLine(to: CGPoint(x: last.x, y: bottom))
+                    area.addLine(to: CGPoint(x: first.x, y: bottom))
+                    area.closeSubpath()
+                    context.fill(area, with: .linearGradient(Gradient(colors: [accent.opacity(0.28), .clear]),
+                                                             startPoint: CGPoint(x: 0, y: top), endPoint: CGPoint(x: 0, y: bottom)))
+                    context.stroke(curve, with: .color(accent), style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
+                }
+            }.frame(height: 74).accessibilityLabel("未来 1 小时降水量曲线")
         }
-        .padding(.horizontal, 14).padding(.vertical, 10)
+        .padding(.horizontal, 14).padding(.vertical, 11)
         .background(Color.primary.opacity(0.062), in: RoundedRectangle(cornerRadius: 16))
         .overlay {
             RoundedRectangle(cornerRadius: 16).strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)
         }
+    }
+
+    private func smoothCurve(_ points: [CGPoint]) -> Path {
+        var curve = Path()
+        guard let first = points.first else { return curve }
+        curve.move(to: first)
+        for (start, end) in zip(points, points.dropFirst()) {
+            let dx = (end.x - start.x) / 3
+            curve.addCurve(to: end, control1: CGPoint(x: start.x + dx, y: start.y),
+                           control2: CGPoint(x: end.x - dx, y: end.y))
+        }
+        return curve
     }
 
     private func hourly(_ weather: Weather) -> some View {
@@ -492,13 +507,7 @@ struct WeatherView: View {
                 let points = entries.enumerated().map { index, hour in
                     CGPoint(x: column * (Double(index) + 0.5), y: 48 - (hour.temperature - low) / span * 25)
                 }
-                var curve = Path()
-                curve.move(to: points[0])
-                for (start, end) in zip(points, points.dropFirst()) {
-                    let dx = (end.x - start.x) / 3
-                    curve.addCurve(to: end, control1: CGPoint(x: start.x + dx, y: start.y),
-                                   control2: CGPoint(x: end.x - dx, y: end.y))
-                }
+                let curve = smoothCurve(points)
                 if let end = points.last, points.count > 1 {
                     var area = curve
                     area.addLine(to: CGPoint(x: end.x, y: size.height))
@@ -518,17 +527,17 @@ struct WeatherView: View {
                     context.draw(Text(degrees(hour.temperature)).font(.system(size: 10)),
                                  at: CGPoint(x: point.x, y: point.y - 13))
                 }
-            }.frame(height: 61).accessibilityHidden(true)
+            }.frame(height: 64).accessibilityHidden(true)
             HStack(spacing: 0) {
                 ForEach(Array(entries.enumerated()), id: \.offset) { _, hour in
                     VStack(spacing: 3) {
                         WeatherIcon(code: hour.code, day: hour.isDay, size: 26)
                         Text(hour.time.count >= 16 ? String(hour.time.dropFirst(11).prefix(5)) : hour.time)
                             .font(.system(size: 11)).foregroundStyle(.secondary)
-                        Text(degrees(hour.temperature)).font(.system(size: 13)).monospacedDigit()
+                        appearance.styledText(degrees(hour.temperature), size: 13)
                     }.frame(maxWidth: .infinity)
                 }
-            }
+            }.padding(.vertical, 3)
         }
     }
 
@@ -553,7 +562,7 @@ struct WeatherView: View {
                         Text(label.date).font(.system(size: 11)).foregroundStyle(.secondary)
                     }.frame(width: 112, alignment: .leading)
                     WeatherIcon(code: day.code, size: 24).frame(width: 32)
-                    Text(degrees(day.min)).foregroundStyle(.secondary).frame(width: 58, alignment: .trailing)
+                    appearance.styledText(degrees(day.min), size: 14).foregroundStyle(.secondary).frame(width: 58, alignment: .trailing)
                     GeometryReader { proxy in
                         let low = (day.min - minTemp) / span
                         let high = (day.max - minTemp) / span
@@ -565,8 +574,8 @@ struct WeatherView: View {
                                 .offset(x: proxy.size.width * low)
                         }
                     }.frame(height: 5)
-                    Text(degrees(day.max)).frame(width: 36, alignment: .trailing)
-                }.frame(minHeight: 28).font(.system(size: 14)).monospacedDigit()
+                    appearance.styledText(degrees(day.max), size: 14).frame(width: 36, alignment: .leading)
+                }.frame(minHeight: 28).font(.system(size: 14))
             }
         }
     }
@@ -593,34 +602,36 @@ struct WeatherView: View {
 
     private func conditions(_ weather: Weather) -> some View {
         let wind = model.windMetersPerSecond ? weather.wind / 3.6 : weather.wind
-        return HStack(spacing: 8) {
+        return HStack(spacing: 12) {
             reading("湿度 · 相对", "\(decimal(weather.humidity))%", "drop")
             reading("风速 · \(model.windMetersPerSecond ? "m/s" : "km/h")",
-                    decimal(wind, digits: 1) + " " + direction(weather.windDirection), "wind")
+                    decimal(wind, digits: 1), "wind", note: direction(weather.windDirection))
             reading("空气 · \(weather.aqiStandard ?? "AQI")",
                     weather.aqi.map { decimal($0) } ?? "—", "leaf")
                 .help([weather.pm25.map { "PM₂.₅ " + decimal($0) },
                        weather.pm10.map { "PM₁₀ " + decimal($0) }].compactMap { $0 }.joined(separator: "  "))
             reading("气压 · hPa", weather.pressureHpa.map { decimal($0) } ?? "—", "gauge.with.dots.needle.50percent")
             reading("紫外线 · UVI", weather.uvIndex.map { decimal($0, digits: 1) } ?? "—", "sun.max")
-        }.padding(.top, 4)
+        }.padding(.top, 6)
     }
 
-    private func reading(_ title: String, _ value: String, _ icon: String) -> some View {
+    private func reading(_ title: String, _ value: String, _ icon: String, note: String? = nil) -> some View {
         VStack(spacing: 4) {
             HStack(spacing: 4) {
                 Image(systemName: icon).foregroundStyle(accent)
                 Text(title).foregroundStyle(.secondary)
             }.font(.system(size: 10)).lineLimit(1).minimumScaleFactor(0.75).frame(height: 20)
-            Text(value).font(.system(size: 16, weight: .semibold)).monospacedDigit()
-                .lineLimit(1).minimumScaleFactor(0.66).frame(height: 28)
+            HStack(alignment: .firstTextBaseline, spacing: 3) {
+                appearance.styledText(value, size: 16, weight: .semibold)
+                if let note { appearance.styledText(note, size: 10).foregroundStyle(.secondary) }
+            }.lineLimit(1).minimumScaleFactor(0.74).frame(height: 28)
         }.frame(maxWidth: .infinity)
     }
 
     private func degrees(_ temperature: Double) -> String { model.temperature(temperature) }
 
     private func decimal(_ value: Double, digits: Int = 0) -> String {
-        value.formatted(.number.precision(.fractionLength(digits)))
+        value.formatted(.number.precision(.fractionLength(digits)).grouping(.never))
     }
 
     private func direction(_ value: Double) -> String {

@@ -24,6 +24,11 @@ fi
 if [[ -f "$assets/Fonts/Geist-VariableFont_wght.ttf" ]]; then
   cp "$assets/Fonts/Geist-VariableFont_wght.ttf" "$assets/Fonts/Geist-OFL.txt" "$app/Contents/Resources/"
 fi
+reference="../../outputs/Mac前端还原包"
+if [[ -f "$reference/fixtures.json" && -f "$reference/fixtures/reference-cover.png" ]]; then
+  mkdir -p "$app/Contents/Resources/Reference"
+  cp "$reference/fixtures.json" "$reference/fixtures/reference-cover.png" "$app/Contents/Resources/Reference/"
+fi
 cp Resources/Info.plist "$app/Contents/Info.plist"
 codesign --force --sign "${LUMIBAR_SIGN_IDENTITY:--}" "$app"
 printf '%s\n' "$app"

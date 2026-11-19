@@ -38,6 +38,19 @@ struct AccentPalette: Identifiable {
 final class AppearanceModel {
     private let defaults: UserDefaults
     var onThemeChange: (() -> Void)?
+    var onEntryChange: (() -> Void)?
+    var weatherLite: Bool {
+        didSet { defaults.set(weatherLite, forKey: "appearance.weatherLite"); onEntryChange?() }
+    }
+    var westernFont: String {
+        didSet { defaults.set(westernFont, forKey: "appearance.westernFont"); onEntryChange?() }
+    }
+    var chineseFont: String {
+        didSet { defaults.set(chineseFont, forKey: "appearance.chineseFont"); onEntryChange?() }
+    }
+    var lyricsSize: Double {
+        didSet { defaults.set(lyricsSize, forKey: "appearance.lyricsSize") }
+    }
     var theme: String {
         didSet {
             defaults.set(theme, forKey: "appearance.theme")
@@ -73,6 +86,11 @@ final class AppearanceModel {
 
     init(defaults: UserDefaults) {
         self.defaults = defaults
+        weatherLite = defaults.bool(forKey: "appearance.weatherLite")
+        westernFont = defaults.string(forKey: "appearance.westernFont") ?? ""
+        chineseFont = defaults.string(forKey: "appearance.chineseFont") ?? ""
+        let size = defaults.object(forKey: "appearance.lyricsSize") as? Double ?? 22
+        lyricsSize = size.isFinite ? min(36, max(18, size)) : 22
         theme = defaults.string(forKey: "appearance.theme") ?? "System"
         accentID = defaults.string(forKey: "appearance.accent") ?? "lavender"
         let density = defaults.object(forKey: "appearance.glassDensity") as? Double ?? 0.50
@@ -86,23 +104,72 @@ final class AppearanceModel {
     }
 
     func tint(_ scheme: ColorScheme) -> Color {
-        let color = scheme == .dark ? Color(red: 0.15, green: 0.17, blue: 0.24)
-            : Color(red: 0.95, green: 0.96, blue: 0.99)
-        return color.opacity(scheme == .dark ? glassDensity * 0.77 : glassDensity * 0.48)
+        let density = min(0.95, max(0.35, glassDensity))
+        if scheme == .dark {
+            return AccentPalette.color(0x141927).opacity(0.40 + (density - 0.35) * 0.62)
+        }
+        return Color.white.opacity(0.34 + (density - 0.35) * 0.37)
+    }
+
+    func styledText(_ value: String, size: CGFloat, weight: Font.Weight = .regular) -> Text {
+        let pieces = scriptRuns(value)
+        var content = AttributedString()
+        for (part, chinese) in pieces {
+            var run = AttributedString(part)
+            let family = chinese ? (chineseFont.isEmpty ? "PingFang SC" : chineseFont)
+                                 : (westernFont.isEmpty ? "Geist" : westernFont)
+            run.font = .custom(family, size: size).weight(weight)
+            content += run
+        }
+        return Text(content)
+    }
+
+    func textWidth(_ value: String, size: CGFloat, semibold: Bool = false) -> CGFloat {
+        scriptRuns(value).reduce(0) { total, run in
+            let name = run.1 ? (chineseFont.isEmpty ? "PingFang SC" : chineseFont)
+                             : (westernFont.isEmpty ? "Geist" : westernFont)
+            let fallback = NSFont.systemFont(ofSize: size, weight: semibold ? .semibold : .regular)
+            let font = NSFontManager.shared.font(withFamily: name, traits: [], weight: semibold ? 8 : 5, size: size) ?? fallback
+            return total + (run.0 as NSString).size(withAttributes: [.font: font]).width
+        }
+    }
+
+    private func scriptRuns(_ value: String) -> [(String, Bool)] {
+        var result: [(String, Bool)] = []
+        for character in value {
+            let han = character.unicodeScalars.contains { scalar in
+                (0x2E80...0x9FFF).contains(scalar.value) || (0xF900...0xFAFF).contains(scalar.value)
+                    || (0x20000...0x323AF).contains(scalar.value)
+            }
+            if let last = result.indices.last, result[last].1 == han {
+                result[last].0.append(character)
+            } else {
+                result.append((String(character), han))
+            }
+        }
+        return result
     }
 }
 
 struct SettingsView: View {
     enum Page: String, CaseIterable {
+        case general = "常规"
         case appearance = "外观"
+        case entries = "菜单栏"
         case weather = "天气"
         case music = "音乐与歌词"
+        case plugins = "插件"
+        case about = "关于"
 
         var symbol: String {
             switch self {
+            case .general: "gearshape"
             case .appearance: "pencil"
+            case .entries: "menubar.rectangle"
             case .weather: "sun.max"
             case .music: "music.note"
+            case .plugins: "puzzlepiece.extension"
+            case .about: "info.circle"
             }
         }
     }
@@ -110,50 +177,88 @@ struct SettingsView: View {
     @Bindable var appearance: AppearanceModel
     @Bindable var weather: WeatherModel
     @Bindable var music: MusicModel
+    var close: () -> Void = {}
     @ViewState private var page: Page = .appearance
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        HStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 7) {
-                ForEach(Page.allCases, id: \.self) { item in
-                    Button { page = item } label: {
-                        Label(item.rawValue, systemImage: item.symbol)
-                            .font(.system(size: 15, weight: .medium))
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, 13).frame(height: 40)
-                            .background(page == item ? appearance.accent.color.opacity(0.23) : .clear,
-                                        in: RoundedRectangle(cornerRadius: 10))
-                    }.buttonStyle(.plain)
-                }
-                Spacer(minLength: 0)
-            }
-            .frame(width: 142).padding(.horizontal, 14).padding(.top, 22)
+        VStack(spacing: 0) {
+            HStack(spacing: 10) {
+                Image(nsImage: NSApplication.shared.applicationIconImage).resizable()
+                    .scaledToFit().frame(width: 26, height: 26)
+                appearance.styledText("LumiBar", size: 21, weight: .semibold)
+                Spacer()
+                Button(action: close) {
+                    Image(systemName: "xmark").font(.system(size: 16, weight: .light))
+                        .frame(width: 31, height: 34).contentShape(Rectangle())
+                }.buttonStyle(.plain).keyboardShortcut("w", modifiers: .command).accessibilityLabel("关闭设置")
+            }.padding(.horizontal, 20).frame(height: 54)
             Divider()
-            ScrollView {
-                switch page {
-                case .appearance: appearancePage
-                case .weather: weatherPage
-                case .music: musicPage
+            HStack(spacing: 0) {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(Page.allCases, id: \.self) { item in
+                        Button { page = item } label: {
+                            HStack(spacing: 10) {
+                                Image(systemName: item.symbol).font(.system(size: 16, weight: .light)).frame(width: 18)
+                                appearance.styledText(item.rawValue, size: 15)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 12).frame(height: 42)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(SettingsNavigationStyle(selected: page == item, color: appearance.accent.color))
+                        .accessibilityAddTraits(page == item ? .isSelected : [])
+                    }
+                    Spacer(minLength: 0)
                 }
-            }.scrollIndicators(.visible)
+                .frame(width: 144).padding(.horizontal, 14).padding(.top, 22)
+                ScrollView {
+                    switch page {
+                    case .general:
+                        VStack(alignment: .leading, spacing: 18) {
+                            heading("常规", "LumiBar 在菜单栏运行")
+                            Toggle("显示音乐入口", isOn: $music.showMusic)
+                            Toggle("动态光效", isOn: $appearance.animation)
+                        }.padding(24).frame(maxWidth: .infinity, alignment: .leading)
+                    case .appearance: appearancePage
+                    case .entries:
+                        VStack(alignment: .leading, spacing: 18) {
+                            heading("菜单栏", "调整天气和音乐入口")
+                            Toggle("精简天气胶囊", isOn: $appearance.weatherLite)
+                            Toggle("显示音乐入口", isOn: $music.showMusic)
+                        }.padding(24).frame(maxWidth: .infinity, alignment: .leading)
+                    case .weather: weatherPage
+                    case .music: musicPage
+                    case .plugins:
+                        heading("插件", "当前 Mac 版使用内置前端。Windows 外部前端的配置由 Windows 客户端管理。")
+                            .padding(24).frame(maxWidth: .infinity, alignment: .leading)
+                    case .about:
+                        heading("关于 LumiBar", "macOS 版 · " + (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""))
+                            .padding(24).frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }.scrollIndicators(.visible)
+            }
         }
-        .frame(width: 558, height: 596)
+        .frame(width: 560, height: 650)
         .tint(appearance.accent.color)
-        .background(appearance.tint(colorScheme))
+        .modifier(FlyoutChrome(appearance: appearance))
     }
 
     private var appearancePage: some View {
-        VStack(alignment: .leading, spacing: 21) {
+        VStack(alignment: .leading, spacing: 26) {
             heading("外观与光效", "让界面通透起来，让音乐染上颜色。")
             VStack(alignment: .leading, spacing: 9) {
                 Text("主题").font(.headline)
-                Picker("主题", selection: $appearance.theme) {
-                    Text("跟随系统").tag("System")
-                    Text("浅色").tag("Light")
-                    Text("深色").tag("Dark")
-                }
-                .pickerStyle(.segmented).labelsHidden()
+                HStack(spacing: 0) {
+                    ForEach([("System", "跟随系统"), ("Light", "浅色"), ("Dark", "深色")], id: \.0) { value, label in
+                        Button { appearance.theme = value } label: {
+                            appearance.styledText(label, size: 12, weight: .medium)
+                                .frame(maxWidth: .infinity).frame(height: 27).contentShape(Rectangle())
+                        }
+                        .buttonStyle(SettingsThemeStyle(selected: appearance.theme == value, color: appearance.accent.color))
+                        .accessibilityAddTraits(appearance.theme == value ? .isSelected : [])
+                    }
+                }.padding(3).background(Color.primary.opacity(0.045), in: Capsule())
             }
             VStack(alignment: .leading, spacing: 13) {
                 HStack {
@@ -191,7 +296,7 @@ struct SettingsView: View {
                         .accessibilityLabel("玻璃密度")
                     Text(appearance.glassDensity.formatted(.percent.precision(.fractionLength(0))))
                         .font(.subheadline.monospacedDigit()).frame(width: 42, alignment: .trailing)
-                }
+                }.frame(height: 26).padding(.trailing, 10)
             }
             Divider()
             toggleRow("封面着色", "根据当前播放的封面，在界面上融入柔和的色彩", binding: $appearance.coverTint)
@@ -227,10 +332,8 @@ struct SettingsView: View {
             .padding(8).glassEffect(.regular, in: RoundedRectangle(cornerRadius: 18))
             percentControl("着色浓度", value: $appearance.coverBlend, range: 0.08...0.55)
             percentControl("封面饱和度", value: $appearance.coverSaturation, range: 0...1)
-            VStack(alignment: .leading, spacing: 11) {
-                Label("中文字体 · 苹方", systemImage: "character")
-                Label("西文字体 · Geist", systemImage: "textformat")
-            }.font(.subheadline).foregroundStyle(.secondary)
+            FontChoice(title: "中文字体", defaultName: "苹方", family: $appearance.chineseFont)
+            FontChoice(title: "西文字体", defaultName: "Geist", family: $appearance.westernFont)
         }
         .padding(24)
     }
@@ -254,12 +357,14 @@ struct SettingsView: View {
     }
 
     private func toggleRow(_ title: String, _ subtitle: String, binding: Binding<Bool>) -> some View {
-        Toggle(isOn: binding) {
+        HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 6) {
                 Text(title).font(.headline)
                 Text(subtitle).font(.caption).foregroundStyle(.secondary)
             }
-        }.toggleStyle(.switch)
+            Spacer(minLength: 0)
+            Toggle(title, isOn: binding).labelsHidden().toggleStyle(.switch)
+        }.padding(.horizontal, 1).padding(.vertical, 3)
     }
 
     private var weatherPage: some View {
@@ -288,6 +393,13 @@ struct SettingsView: View {
             Toggle("显示音乐岛", isOn: $music.showMusic)
             Toggle("实时频谱（系统音频权限）", isOn: $music.spectrumEnabled)
             Toggle("在线查找同步歌词", isOn: $music.onlineLyrics)
+            VStack(alignment: .leading, spacing: 8) {
+                Text("歌词字号").font(.headline)
+                HStack {
+                    Slider(value: $appearance.lyricsSize, in: 18...36, step: 1).accessibilityLabel("歌词字号")
+                    Text(Int(appearance.lyricsSize).formatted()).frame(width: 30, alignment: .trailing)
+                }
+            }
             if let error = music.audioError { Text(error).font(.caption).foregroundStyle(.secondary) }
             Text("Apple Music 和 Spotify 使用 macOS 自动化权限。")
                 .font(.caption).foregroundStyle(.secondary)
@@ -296,5 +408,57 @@ struct SettingsView: View {
                 Button("重新检查自动化权限") { music.retryAutomation() }
             }
         }.padding(24).frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+
+private struct SettingsThemeStyle: ButtonStyle {
+    let selected: Bool
+    let color: Color
+    @ViewState private var hovered = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background(color.opacity(selected ? (hovered ? 0.32 : 0.24) : hovered ? 0.10 : 0), in: Capsule())
+            .onHover { hovered = $0 }
+    }
+}
+
+private struct SettingsNavigationStyle: ButtonStyle {
+    let selected: Bool
+    let color: Color
+    @ViewState private var hovered = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background(color.opacity(selected ? (hovered ? 0.30 : 0.22) : hovered ? 0.10 : 0),
+                        in: RoundedRectangle(cornerRadius: 9))
+            .onHover { hovered = $0 }
+    }
+}
+
+private struct FontChoice: View {
+    let title: String
+    let defaultName: String
+    @Binding var family: String
+    @ViewState private var searching = false
+    @ViewState private var query = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title).font(.headline)
+            Button(family.isEmpty ? "默认：\(defaultName)" : family) { searching.toggle() }
+                .popover(isPresented: $searching) {
+                    let names = NSFontManager.shared.availableFontFamilies
+                    let results = query.isEmpty ? names : names.filter { $0.localizedCaseInsensitiveContains(query) }
+                    VStack(alignment: .leading, spacing: 10) {
+                        TextField("搜索已安装字体", text: $query)
+                        List(results, id: \.self) { name in
+                            Button(name) { family = name; searching = false }.buttonStyle(.plain)
+                        }
+                    }.padding(13).frame(width: 290, height: 290)
+                }
+            Button("恢复默认：\(defaultName)") { family = "" }.disabled(family.isEmpty)
+        }
     }
 }

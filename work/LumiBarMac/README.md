@@ -1,6 +1,6 @@
 # LumiBar for Mac
 
-LumiBar 的 macOS 27 客户端。音乐岛使用 AppKit 浮层贴在刘海正下方，避开系统菜单栏。无刘海时在屏幕顶部居中。天气使用系统菜单栏入口。天气详情沿用原版彩色天气图标、局部柔光、逐时温度曲线和逐日温差条。天气与歌词浮窗采用 SwiftUI 的 Liquid Glass。原版图集和 Geist 从仓库内复用，中文使用系统苹方。天气保留三列速览和完整预报，歌词页保留上下渐隐、封面柔光、底部频谱和播放控件。
+LumiBar 的 macOS 27 客户端。音乐和天气使用 macOS 系统菜单栏入口。音乐以小封面和频谱常驻，悬停在入口下展开播放控制，点击打开屏幕顶部居中的歌词浮窗。天气菜单栏使用自绘胶囊，也可在设置中选择精简天气。天气详情沿用原版彩色天气图标、局部柔光、逐时温度曲线和逐日温差条。天气与歌词浮窗采用 SwiftUI 的 Liquid Glass。原版图集和 Geist 从仓库内复用，中文使用系统苹方。天气保留三列速览和完整预报，歌词页保留上下渐隐、封面柔光、底部频谱和播放控件。
 
 ## 构建
 
@@ -12,7 +12,7 @@ open work/LumiBarMac/build/LumiBar.app
 bash work/LumiBarMac/package.sh
 ```
 
-构建脚本按当前 Mac 架构生成应用，并沿用仓库中的应用图标和天气图集。默认使用临时签名，适合本机开发。可通过 `LUMIBAR_SIGN_IDENTITY` 指定签名身份。DMG 保存于 `work/LumiBarMac/build`，公开分发前需要 Developer ID 签名及 Apple 公证。
+构建脚本按当前 Mac 架构生成应用，并沿用仓库中的应用图标和天气图集。也可以给构建、打包脚本传入输出目录，以便保留正在使用的版本。默认使用临时签名，适合本机开发。可通过 `LUMIBAR_SIGN_IDENTITY` 指定签名身份。DMG 保存于 `work/LumiBarMac/build`，公开分发前需要 Developer ID 签名及 Apple 公证。
 
 ## 使用
 
@@ -23,9 +23,19 @@ bash work/LumiBarMac/package.sh
 - 需要频谱时，在设置启用「实时频谱」，并授权系统音频录制。频谱只分析选中播放器的音频，不保留录音。
 - QQ 音乐和浏览器媒体会话暂未接入。多显示器、全屏及菜单栏自动隐藏还需要专项实测。
 
-使用示例天气与歌曲检查外观：
+## 视觉对照
+
+预览使用 [Windows 还原包](../../outputs/Mac前端还原包/README.md) 的同一份样例与封面。每个窗口以逻辑尺寸绘制，浅色底板为 `#F3F5FA`，深色底板为 `#171922`。预览使用隔离的设置，播放按钮不会联系真实播放器。
+
+打开菜单栏的交互样例：
 
 ```sh
 open -n work/LumiBarMac/build/LumiBar.app --args --preview --weather --lyrics
 open -n work/LumiBarMac/build/LumiBar.app --args --preview --weather-hover
+```
+
+逐窗对照时可指定 `weather`、`weather-hover`、`weather-capsule`、`weather-lite`、`weather-wide`、`weather-alerts`、`music` 或 `settings`。默认浅色，带 `--dark` 时显示深色。
+
+```sh
+open -n work/LumiBarMac/build/LumiBar.app --args --reference-case music --dark
 ```

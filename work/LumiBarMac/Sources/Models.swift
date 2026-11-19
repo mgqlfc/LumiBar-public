@@ -12,6 +12,7 @@ final class WeatherModel: NSObject, CLLocationManagerDelegate {
     private var locationTask: Task<Void, Never>?
     private var locationPending = false
 
+    var isPreview = false
     var weather: Weather?
     var error: String?
     var locationError: String?
@@ -96,7 +97,7 @@ final class WeatherModel: NSObject, CLLocationManagerDelegate {
     }
 
     func refresh() {
-        guard let city else { return }
+        guard !isPreview, let city else { return }
         refreshTask?.cancel()
         loading = true
         error = nil
@@ -117,6 +118,7 @@ final class WeatherModel: NSObject, CLLocationManagerDelegate {
     }
 
     func locate() {
+        guard !isPreview else { return }
         locationError = nil
         locationPending = true
         updateLocationAuthorization()
@@ -229,6 +231,7 @@ final class MusicModel {
     }
 
     func start() {
+        guard previewSpectrum == nil else { return }
         guard showMusic, polling == nil else { return }
         polling = Task {
             while !Task.isCancelled {
@@ -244,6 +247,7 @@ final class MusicModel {
     }
 
     func connectNetease() {
+        guard previewSpectrum == nil else { return }
         let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
         if AXIsProcessTrustedWithOptions(options) {
             neteaseStatus = "已授权。请在网易云音乐中播放一首歌。"
@@ -253,6 +257,7 @@ final class MusicModel {
     }
 
     func control(_ command: PlaybackCommand) {
+        guard previewSpectrum == nil else { return }
         guard let track, track.canControl, commandTask == nil else { return }
         commandTask = Task {
             if track.player == .netease {
@@ -272,6 +277,7 @@ final class MusicModel {
     }
 
     func loadLRC() {
+        guard previewSpectrum == nil else { return }
         guard let track else { return }
         let picker = NSOpenPanel()
         picker.title = "导入同步歌词"
@@ -352,6 +358,7 @@ final class MusicModel {
     }
 
     private func loadMetadata() {
+        guard previewSpectrum == nil else { return }
         metadataTask?.cancel()
         lyricsLoading = false
         guard let track else { return }
@@ -393,6 +400,7 @@ final class MusicModel {
     }
 
     private func updateSpectrum() {
+        guard previewSpectrum == nil else { return }
         let pid = spectrumEnabled && track?.playing == true ? track?.pid : nil
         guard lastSpectrumPID != pid else {
             if pid == nil { spectrum.stop() }

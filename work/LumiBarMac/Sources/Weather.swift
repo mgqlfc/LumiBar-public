@@ -100,8 +100,7 @@ struct Weather: Codable {
         return aqiStandard == "CN AQI" ? (aqi <= 300 ? "重度污染" : "严重污染") : "很不健康"
     }
 
-    var currentAlerts: [Alert] {
-        let now = Date.now
+    func currentAlerts(at now: Date = .now) -> [Alert] {
         let ranks = ["red": 4, "orange": 3, "yellow": 2, "blue": 1]
         return Dictionary(grouping: alerts ?? [], by: \.id).values
             .compactMap { $0.max { ($0.issuedAt.flatMap(WeatherAPI.date) ?? .distantPast) <

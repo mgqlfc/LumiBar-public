@@ -2,13 +2,14 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-app="build/LumiBar.app"
-image="build/LumiBar-macOS-$(uname -m).dmg"
+output="${1:-build}"
+app="$output/LumiBar.app"
+image="${2:-$output/LumiBar-macOS-$(uname -m).dmg}"
 if [[ ! -d "$app" ]]; then
-  bash build.sh
+  bash build.sh "$output"
 fi
 codesign --verify --strict "$app"
-stage="$(mktemp -d "$PWD/build/package.XXXXXX")"
+stage="$(mktemp -d "$output/package.XXXXXX")"
 trap 'rm -rf "$stage"' EXIT
 ditto "$app" "$stage/LumiBar.app"
 ln -s /Applications "$stage/Applications"
