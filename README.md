@@ -2,11 +2,12 @@
 
 Ma Guanqun with Codex
 
-Windows 11 任务栏天气与音乐双胶囊。当前版本 0.7.56，使用 C# / .NET 8 / WinUI 3；原生 C++ 组件处理任务栏空间预留和窗口层级。自带天气详情、系统媒体控制、频谱、同步歌词和可替换前端接口。Mac 版目标 macOS 27：音乐围绕刘海展开，天气放在右侧菜单栏，详见 [Mac 移植交接](MACOS_HANDOFF.md)。
+Windows 11 任务栏天气与音乐双胶囊。当前版本 0.7.56，使用 C# / .NET 8 / WinUI 3；原生 C++ 组件处理任务栏空间预留和窗口层级。自带天气详情、系统媒体控制、频谱、同步歌词和可替换前端接口。Mac 版面向 macOS 27，音乐围绕刘海展开，天气放在右侧菜单栏。构建及使用说明见 [Mac 客户端](work/LumiBarMac/README.md)。
 
 ## 目录
 
 - `work/LumiBar`：当前 Windows 主程序，含内置前端与后端。
+- `work/LumiBarMac`：macOS 原生客户端和构建脚本。
 - `work/BackendTests`：不依赖 WinUI 的后端回归检查。
 - `work/FrontendSupportTests`：插件配置默认值与迁移检查。
 - `work/TaskbarBridge`：任务栏原生桥接组件。
@@ -36,7 +37,7 @@ dotnet build .\work\LumiBar\LumiBar.csproj -c Release -p:Platform=x64
 dotnet run --project work/BackendTests/BackendTests.csproj -c Release
 ```
 
-0.7.56 后端已在开发机通过 350 项检查。Shell 浮层导致测量中断时沿用同一任务栏的已验证边界；原生空间预留报错时仍保留窗口层级跟随，避免开始菜单和搜索盖住胶囊。预警徽章只显示事件名称。macOS 原生客户端处于概念与移植准备阶段，Windows 10 任务栏适配待完成。
+0.7.56 后端已在开发机通过 350 项检查。Shell 浮层导致测量中断时沿用同一任务栏的已验证边界；原生空间预留报错时仍保留窗口层级跟随，避免开始菜单和搜索盖住胶囊。预警徽章只显示事件名称。Windows 10 任务栏适配待完成。
 
 Antigravity 前端新增 Win2D 1.3.2、锁文件与离线构建脚本。最新配置版本为 v7，歌词浮窗默认 512×384；历史 0.7.49 文档记录的是 v6 的 420×384，当前默认值以 `Sdk/PluginConfig.cs` 和 `antigravity-plugin.defaults.json` 为准。
 
@@ -68,6 +69,6 @@ GitHub 页面打开 **Actions → Build Release → Run workflow**，分支选 `
 git clone https://github.com/mgqlfc/LumiBar.git
 ```
 
-克隆后先打开 [MACOS_HANDOFF.md](MACOS_HANDOFF.md)，概念图在 `outputs/concepts/LumiBar-macOS27-concept-v1.png`。
+克隆后按 [Mac 客户端](work/LumiBarMac/README.md) 构建。界面参考见 [Mac 移植交接](MACOS_HANDOFF.md)。
 
 仓库保留项目既有目录，便于现有脚本和相对引用继续工作。运行数据、城市收藏、歌词缓存、崩溃转储、密钥及发布安装包均不参与同步。

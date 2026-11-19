@@ -11,6 +11,7 @@
 !/work/
 /work/*
 !/work/LumiBar/
+!/work/LumiBarMac/
 !/work/BackendTests/
 !/work/FrontendSupportTests/
 !/work/TaskbarBridge/
@@ -29,6 +30,7 @@
 **/bin/
 **/obj/
 **/build/
+**/*.dmg
 **/dist*/
 **/probe-*/
 **/.vs/
