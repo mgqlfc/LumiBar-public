@@ -17,7 +17,7 @@ struct FlyoutChrome: ViewModifier {
 
 enum MenuBarCapsuleShape {
     static func outline(height: CGFloat) -> RoundedRectangle {
-        RoundedRectangle(cornerRadius: height * 0.47)
+        RoundedRectangle(cornerRadius: height * 0.49)
     }
 
     static func movingOutline(in bounds: CGRect, progress: CGFloat, gap: CGFloat) -> Path {

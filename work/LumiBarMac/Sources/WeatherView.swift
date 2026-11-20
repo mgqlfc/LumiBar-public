@@ -144,7 +144,6 @@ struct WeatherView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 8) {
                         header
-                        citySwitcher.padding(.top, 3).padding(.bottom, 10)
                         if searching || model.city == nil { search }
                         if let message = model.locationError ?? model.error {
                             Text(message).font(.caption).foregroundStyle(.secondary)
@@ -228,40 +227,45 @@ struct WeatherView: View {
     }
 
     private var header: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 9) {
-            appearance.styledText(model.city?.name ?? "你的天气", size: 24, weight: .semibold).lineLimit(1)
-                .layoutPriority(2)
-            if let weather = model.weather {
-                Button(weather.source) { showSources.toggle() }
-                    .buttonStyle(.plain).font(.caption2).foregroundStyle(.secondary)
-                    .lineLimit(1).fixedSize().help("数据来源")
-                    .popover(isPresented: $showSources) {
-                        VStack(alignment: .leading, spacing: 7) {
-                            Text(weather.source).font(.headline)
-                            ForEach(Array(((weather.attributions ?? []) + (weather.providerNote ?? [])).enumerated()),
-                                    id: \.offset) { _, line in
-                                Text(line).font(.caption).foregroundStyle(.secondary)
-                            }
-                        }.padding(16).frame(maxWidth: 300, alignment: .leading)
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 7) {
+                citySwitcher.frame(height: 28)
+                iconButton("arrow.clockwise", "更新天气") { model.refresh() }.disabled(model.city == nil || model.loading)
+                Menu {
+                    Button("选择城市") { searching.toggle() }
+                    if let city = model.city {
+                        Button(model.favorites.contains(where: { $0.id == city.id }) ? "从收藏移除" : "收藏当前城市") {
+                            model.toggleFavorite(city)
+                        }
                     }
-            }
-            appearance.styledText(weatherStatus, size: 11).foregroundStyle(.secondary).lineLimit(1)
-            Spacer(minLength: 0)
-            iconButton("arrow.clockwise", "更新天气") { model.refresh() }.disabled(model.city == nil || model.loading)
-            Menu {
-                Button("选择城市") { searching.toggle() }
-                if let city = model.city {
-                    Button(model.favorites.contains(where: { $0.id == city.id }) ? "从收藏移除" : "收藏当前城市") {
-                        model.toggleFavorite(city)
-                    }
+                    Button("设置…", action: showSettings)
+                    Divider()
+                    Button("退出 LumiBar", action: quit)
+                } label: {
+                    Image(systemName: "ellipsis").font(.system(size: 14, weight: .semibold)).frame(width: 25, height: 25)
                 }
-                Button("设置…", action: showSettings)
-                Divider()
-                Button("退出 LumiBar", action: quit)
-            } label: {
-                Image(systemName: "ellipsis").font(.system(size: 14, weight: .semibold)).frame(width: 25, height: 25)
+                .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize().accessibilityLabel("更多选项")
             }
-            .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize().accessibilityLabel("更多选项")
+            let status = weatherStatus
+            if model.weather != nil || !status.isEmpty {
+                HStack(alignment: .firstTextBaseline, spacing: 9) {
+                    if let weather = model.weather {
+                        Button(weather.source) { showSources.toggle() }
+                            .buttonStyle(.plain).fixedSize().help("数据来源")
+                            .popover(isPresented: $showSources) {
+                                VStack(alignment: .leading, spacing: 7) {
+                                    Text(weather.source).font(.headline)
+                                    ForEach(Array(((weather.attributions ?? []) + (weather.providerNote ?? [])).enumerated()),
+                                            id: \.offset) { _, line in
+                                        Text(line).font(.caption).foregroundStyle(.secondary)
+                                    }
+                                }.padding(16).frame(maxWidth: 300, alignment: .leading)
+                            }
+                    }
+                    if !status.isEmpty { Text(status) }
+                }
+                .font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+            }
         }
     }
 
@@ -373,7 +377,7 @@ struct WeatherView: View {
     private func current(_ weather: Weather) -> some View {
         let condition = Weather.appearance(weather.code, day: weather.isDay)
         return HStack(spacing: 12) {
-            WeatherIcon(code: weather.code, day: weather.isDay, size: 68)
+            WeatherIcon(code: weather.code, day: weather.isDay, size: 68, centersArtwork: true)
                 .background { weatherGlow(weather).frame(width: 215, height: 194).allowsHitTesting(false) }
             appearance.styledText(degrees(weather.temperature) + (model.fahrenheit ? "F" : "C"), size: 52, weight: .light)
                 .fixedSize().accessibilityLabel("实况温度 " + degrees(weather.temperature))
