@@ -15,12 +15,18 @@ struct FlyoutChrome: ViewModifier {
     }
 }
 
+enum MenuBarCapsuleShape {
+    static func outline(height: CGFloat) -> RoundedRectangle {
+        RoundedRectangle(cornerRadius: height * 0.43)
+    }
+}
+
 struct MenuBarCapsuleChrome: ViewModifier {
     let height: CGFloat
     @Environment(\.colorScheme) private var scheme
 
     func body(content: Content) -> some View {
-        let shape = RoundedRectangle(cornerRadius: height * 0.43)
+        let shape = MenuBarCapsuleShape.outline(height: height)
         content
             .background(shape.fill(scheme == .dark ? Color(red: 0.24, green: 0.29, blue: 0.37).opacity(0.70) : .white.opacity(0.55)))
             .clipShape(shape)

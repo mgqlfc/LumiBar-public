@@ -87,6 +87,28 @@ private final class SurfacePanel: NSPanel {
     }
 }
 
+private final class CapsuleInputView: NSView {
+    var onRelease: ((NSEvent.EventType, NSPoint, NSPoint) -> Void)?
+    private var press: (button: Int, point: NSPoint)?
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    override func mouseDown(with event: NSEvent) { begin(event) }
+    override func rightMouseDown(with event: NSEvent) { begin(event) }
+    override func mouseUp(with event: NSEvent) { end(event) }
+    override func rightMouseUp(with event: NSEvent) { end(event) }
+
+    private func begin(_ event: NSEvent) {
+        guard let window else { return }
+        press = (event.buttonNumber, window.convertPoint(toScreen: event.locationInWindow))
+    }
+
+    private func end(_ event: NSEvent) {
+        guard let press, press.button == event.buttonNumber, let window else { return }
+        self.press = nil
+        onRelease?(event.type, press.point, window.convertPoint(toScreen: event.locationInWindow))
+    }
+}
+
 @MainActor
 final class LumiBarController: NSObject, NSApplicationDelegate {
     private let preview = ProcessInfo.processInfo.arguments.contains("--preview")
@@ -111,6 +133,24 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
     private let status = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let weatherPanel = SurfacePanel()
     private let capsuleGap: CGFloat = 4
+    // The native item supplies layout and keyboard access. This panel receives pointer input without its press backdrop.
+    private lazy var capsuleInputPanel: NSPanel = {
+        let panel = NSPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel],
+                            backing: .buffered, defer: false)
+        panel.isOpaque = false
+        panel.backgroundColor = NSColor.black.withAlphaComponent(0.01)
+        panel.hasShadow = false
+        panel.isMovable = false
+        panel.hidesOnDeactivate = false
+        panel.level = NSWindow.Level(rawValue: NSWindow.Level.statusBar.rawValue + 1)
+        panel.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary, .ignoresCycle]
+        let view = CapsuleInputView()
+        view.onRelease = { [weak self] type, start, end in
+            self?.statusPointerReleased(type, at: end, startedAt: start)
+        }
+        panel.contentView = view
+        return panel
+    }()
     private var menuBarWidth: CGFloat { MusicView.entryWidth * 2 + capsuleGap }
     private var showsMusicCapsule: Bool { music.track?.playing == true && !backgrounded }
     private var weatherStatusImage: NSImage?
@@ -140,7 +180,7 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
     private var backgrounded = false
     private var musicScreen: NSScreen? { NSScreen.screens.first }
     private var motion: Bool { appearance.animation && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
-    private var capsuleHeight: CGFloat { max(12, min(34, NSStatusBar.system.thickness)) }
+    private var capsuleHeight: CGFloat { max(18, min(34, NSStatusBar.system.thickness + 6)) }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if let reference {
@@ -151,6 +191,9 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
         status.button?.target = self
         status.button?.action = #selector(statusClicked)
         status.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
+        status.button?.isBordered = false
+        status.button?.imageScaling = .scaleNone
+        (status.button?.cell as? NSButtonCell)?.highlightsBy = []
         status.button?.setAccessibilityLabel("LumiBar 天气")
         weatherPanel.onCancel = { [weak self] in self?.dismissWeather() }
         expandedPanel.onCancel = { [weak self] in self?.dismissMusic() }
@@ -231,19 +274,37 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
     }
 
     private var statusFrame: NSRect? {
-        guard var frame = entryFrame(status) else { return nil }
-        if musicStatusImage != nil {
-            let offset = MusicView.entryWidth + capsuleGap / 2
-            frame.origin.x += offset
-            frame.size.width -= offset
-        }
-        return frame
+        guard let group = statusImageFrame, let image = weatherStatusImage else { return entryFrame(status) }
+        return NSRect(x: group.maxX - image.size.width, y: group.minY,
+                      width: image.size.width, height: group.height)
     }
 
     private var musicFrame: NSRect? {
-        guard musicStatusImage != nil, var frame = entryFrame(status) else { return nil }
-        frame.size.width = MusicView.entryWidth + capsuleGap / 2
-        return frame
+        guard let image = musicStatusImage, let group = statusImageFrame else { return nil }
+        return NSRect(x: group.minX, y: group.minY, width: image.size.width, height: group.height)
+    }
+
+    private var statusImageFrame: NSRect? {
+        guard let frame = entryFrame(status), let image = status.button?.image else { return nil }
+        let size = image.size
+        return NSRect(x: frame.midX - size.width / 2, y: frame.midY - size.height / 2,
+                      width: size.width, height: size.height)
+    }
+
+    private func capsuleContains(_ pointer: NSPoint, in frame: NSRect?) -> Bool {
+        guard let frame, frame.contains(pointer) else { return false }
+        return MenuBarCapsuleShape.outline(height: frame.height).path(in: frame).contains(pointer)
+    }
+
+    private func syncCapsuleInputPanel() {
+        guard let frame = statusImageFrame, status.button?.window?.isVisible == true, !backgrounded else {
+            if capsuleInputPanel.isVisible { capsuleInputPanel.orderOut(nil) }
+            return
+        }
+        if capsuleInputPanel.frame != frame { capsuleInputPanel.setFrame(frame, display: true) }
+        let reordering = NSEvent.modifierFlags.contains(.command)
+        if capsuleInputPanel.ignoresMouseEvents != reordering { capsuleInputPanel.ignoresMouseEvents = reordering }
+        if !capsuleInputPanel.isVisible { capsuleInputPanel.orderFrontRegardless() }
     }
 
     private func entryFrame(_ item: NSStatusItem) -> NSRect? {
@@ -361,15 +422,30 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
     }
 
     @objc private func statusClicked(_ sender: NSStatusBarButton) {
-        if NSApp.currentEvent?.type == .rightMouseUp {
-            showStatusMenu(sender)
-            return
+        if let type = NSApp.currentEvent?.type, type == .leftMouseUp || type == .rightMouseUp {
+            statusPointerReleased(type, at: NSEvent.mouseLocation)
+        } else {
+            toggleWeather(at: NSEvent.mouseLocation)
         }
-        let cursor = NSEvent.mouseLocation
-        if musicFrame?.contains(cursor) == true {
+    }
+
+    private func statusPointerReleased(_ type: NSEvent.EventType, at pointer: NSPoint, startedAt start: NSPoint? = nil) {
+        let origin = start ?? pointer
+        let musicAnchor = musicFrame
+        let weatherAnchor = statusFrame
+        let overMusic = capsuleContains(pointer, in: musicAnchor) && capsuleContains(origin, in: musicAnchor)
+        let overWeather = capsuleContains(pointer, in: weatherAnchor) && capsuleContains(origin, in: weatherAnchor)
+        guard overMusic || overWeather else { return }
+        if type == .rightMouseUp, let button = status.button {
+            showStatusMenu(button)
+        } else if overMusic {
             toggleLyrics()
-            return
+        } else {
+            toggleWeather(at: pointer)
         }
+    }
+
+    private func toggleWeather(at cursor: NSPoint) {
         if weatherPinned && weatherPanel.isVisible {
             dismissWeather()
             return
@@ -434,7 +510,7 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
 
     private func outsideClick() {
         let pointer = NSEvent.mouseLocation
-        guard entryFrame(status)?.contains(pointer) != true else { return }
+        guard !capsuleContains(pointer, in: statusFrame), !capsuleContains(pointer, in: musicFrame) else { return }
         if weatherPinned, weatherPanel.isVisible, !weatherPanel.frame.contains(pointer),
            !weatherPanel.closing {
             dismissWeather()
@@ -445,16 +521,18 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
     }
 
     @objc private func pointerTick() {
+        syncCapsuleInputPanel()
         let pointer = NSEvent.mouseLocation
         let now = Date.now
         if weatherPinned && !weatherPanel.isVisible { weatherPinned = false }
         let anchor = statusFrame
-        if weatherDismissedUntilExit, anchor?.contains(pointer) != true,
+        let overWeather = capsuleContains(pointer, in: anchor)
+        if weatherDismissedUntilExit, !overWeather,
            !weatherPanel.isVisible || !weatherPanel.frame.contains(pointer) {
             weatherDismissedUntilExit = false
         }
         if music.mode == .compact, !weatherPinned, !weatherDismissedUntilExit, let anchor {
-            if anchor.contains(pointer) {
+            if overWeather {
                 weatherLeaveAt = nil
                 if weatherPanel.closing { weatherPanel.present(weatherPanel.frame) }
                 if let began = pointedAtWeather {
@@ -482,7 +560,7 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
 
         guard music.track != nil, !backgrounded else { return }
         updateMusicStatusImage()
-        let hovering = musicFrame?.contains(pointer) == true
+        let hovering = capsuleContains(pointer, in: musicFrame)
             || (expandedPanel.isVisible && expandedPanel.frame.insetBy(dx: -2, dy: -4).contains(pointer))
         if hovering && !wasAtMusic { musicHoverStartsAt = now }
         if !hovering {
@@ -597,6 +675,7 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
 
     @objc private func sleeping() {
         backgrounded = true
+        syncCapsuleInputPanel()
         music.spectrum.stop()
         updateStatus()
         layoutMusic()
