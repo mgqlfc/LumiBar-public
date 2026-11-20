@@ -88,24 +88,80 @@ private final class SurfacePanel: NSPanel {
 }
 
 private final class CapsuleInputView: NSView {
+    var capsuleAt: ((NSPoint) -> NSRect?)?
     var onRelease: ((NSEvent.EventType, NSPoint, NSPoint) -> Void)?
-    private var press: (button: Int, point: NSPoint)?
+    private var press: (button: Int, point: NSPoint, capsule: NSRect)?
+    private lazy var pressShade: CAShapeLayer = {
+        let shade = CAShapeLayer()
+        shade.fillColor = NSColor.black.cgColor
+        shade.opacity = 0
+        wantsLayer = true
+        layer?.addSublayer(shade)
+        return shade
+    }()
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window != nil { _ = pressShade }
+    }
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     override func mouseDown(with event: NSEvent) { begin(event) }
     override func rightMouseDown(with event: NSEvent) { begin(event) }
+    override func mouseDragged(with event: NSEvent) { drag(event) }
+    override func rightMouseDragged(with event: NSEvent) { drag(event) }
     override func mouseUp(with event: NSEvent) { end(event) }
     override func rightMouseUp(with event: NSEvent) { end(event) }
 
     private func begin(_ event: NSEvent) {
         guard let window else { return }
-        press = (event.buttonNumber, window.convertPoint(toScreen: event.locationInWindow))
+        let point = window.convertPoint(toScreen: event.locationInWindow)
+        guard let capsule = capsuleAt?(point) else { return }
+        press = (event.buttonNumber, point, capsule)
+        shade(capsule)
+    }
+
+    private func drag(_ event: NSEvent) {
+        guard let press, press.button == event.buttonNumber, let window else { return }
+        let point = window.convertPoint(toScreen: event.locationInWindow)
+        shade(capsuleAt?(point) == press.capsule ? press.capsule : nil)
     }
 
     private func end(_ event: NSEvent) {
         guard let press, press.button == event.buttonNumber, let window else { return }
         self.press = nil
+        shade(nil, fade: true)
         onRelease?(event.type, press.point, window.convertPoint(toScreen: event.locationInWindow))
+    }
+
+    func cancelPress() {
+        guard press != nil else { return }
+        press = nil
+        shade(nil)
+    }
+
+    private func shade(_ capsule: NSRect?, fade: Bool = false) {
+        let shade = pressShade
+        let startOpacity = shade.opacity
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        shade.removeAnimation(forKey: "opacity")
+        if let capsule, let window {
+            let local = convert(window.convertFromScreen(capsule), from: nil)
+            shade.path = MenuBarCapsuleShape.outline(height: local.height).path(in: local).cgPath
+            shade.opacity = 0.18
+        } else {
+            shade.opacity = 0
+        }
+        CATransaction.commit()
+        if fade, startOpacity > 0, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            let fadeOut = CABasicAnimation(keyPath: "opacity")
+            fadeOut.fromValue = startOpacity
+            fadeOut.toValue = 0
+            fadeOut.duration = 0.16
+            fadeOut.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            shade.add(fadeOut, forKey: "opacity")
+        }
     }
 }
 
@@ -133,6 +189,7 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
     private let status = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let weatherPanel = SurfacePanel()
     private let capsuleGap: CGFloat = 4
+    private var capsuleInputFrame: NSRect?
     // The native item supplies layout and keyboard access. This panel receives pointer input without its press backdrop.
     private lazy var capsuleInputPanel: NSPanel = {
         let panel = NSPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel],
@@ -145,6 +202,7 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
         panel.level = NSWindow.Level(rawValue: NSWindow.Level.statusBar.rawValue + 1)
         panel.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary, .ignoresCycle]
         let view = CapsuleInputView()
+        view.capsuleAt = { [weak self] point in self?.capsuleFrame(at: point) }
         view.onRelease = { [weak self] type, start, end in
             self?.statusPointerReleased(type, at: end, startedAt: start)
         }
@@ -180,7 +238,7 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
     private var backgrounded = false
     private var musicScreen: NSScreen? { NSScreen.screens.first }
     private var motion: Bool { appearance.animation && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
-    private var capsuleHeight: CGFloat { max(18, min(34, NSStatusBar.system.thickness + 6)) }
+    private let capsuleHeight: CGFloat = 26
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if let reference {
@@ -296,12 +354,25 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
         return MenuBarCapsuleShape.outline(height: frame.height).path(in: frame).contains(pointer)
     }
 
+    private func capsuleFrame(at pointer: NSPoint) -> NSRect? {
+        if let musicFrame, capsuleContains(pointer, in: musicFrame) { return musicFrame }
+        if let statusFrame, capsuleContains(pointer, in: statusFrame) { return statusFrame }
+        return nil
+    }
+
     private func syncCapsuleInputPanel() {
+        let input = capsuleInputPanel.contentView as? CapsuleInputView
         guard let frame = statusImageFrame, status.button?.window?.isVisible == true, !backgrounded else {
+            input?.cancelPress()
+            capsuleInputFrame = nil
             if capsuleInputPanel.isVisible { capsuleInputPanel.orderOut(nil) }
             return
         }
-        if capsuleInputPanel.frame != frame { capsuleInputPanel.setFrame(frame, display: true) }
+        if capsuleInputFrame != frame {
+            input?.cancelPress()
+            capsuleInputFrame = frame
+            capsuleInputPanel.setFrame(frame, display: true)
+        }
         let reordering = NSEvent.modifierFlags.contains(.command)
         if capsuleInputPanel.ignoresMouseEvents != reordering { capsuleInputPanel.ignoresMouseEvents = reordering }
         if !capsuleInputPanel.isVisible { capsuleInputPanel.orderFrontRegardless() }
@@ -451,7 +522,7 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
             return
         }
         dismissMusic()
-        let anchor = statusFrame ?? NSRect(x: cursor.x - 10, y: cursor.y - 14, width: 20, height: 28)
+        let anchor = statusFrame ?? NSRect(x: cursor.x - 10, y: cursor.y - capsuleHeight / 2, width: 20, height: capsuleHeight)
         weatherPinned = true
         weatherDismissedUntilExit = false
         pointedAtWeather = nil

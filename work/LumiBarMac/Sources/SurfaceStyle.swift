@@ -28,7 +28,7 @@ struct MenuBarCapsuleChrome: ViewModifier {
     func body(content: Content) -> some View {
         let shape = MenuBarCapsuleShape.outline(height: height)
         content
-            .background(shape.fill(scheme == .dark ? Color(red: 0.24, green: 0.29, blue: 0.37).opacity(0.70) : .white.opacity(0.55)))
+            .background(shape.fill(scheme == .dark ? Color(red: 0.24, green: 0.29, blue: 0.37).opacity(0.70) : .white.opacity(0.74)))
             .clipShape(shape)
             .overlay {
                 shape.strokeBorder(.linearGradient(colors: [.white.opacity(scheme == .dark ? 0.20 : 0.76),
@@ -62,8 +62,8 @@ struct WeatherCapsule: View {
                     .lineLimit(1).minimumScaleFactor(0.60)
                     .layoutPriority(1)
             }
+            if showsPrecipitation, model.weather != nil { Spacer(minLength: 1) }
             if let rainText {
-                Spacer(minLength: 1)
                 HStack(spacing: 2) {
                     WeatherIcon(code: 61, day: true, size: min(14, height - 5))
                     appearance.styledText(rainText, size: 11).opacity(0.85)
@@ -77,15 +77,15 @@ struct WeatherCapsule: View {
             if let weather = model.weather {
                 let moving = appearance.animation && !reduceMotion
                 TimelineView(.animation(minimumInterval: 1 / 18, paused: !moving)) { context in
-                    let tones = WeatherLight.colors(code: weather.code, day: weather.isDay)
+                    let color = WeatherLight.colors(code: weather.code, day: weather.isDay).0
+                    let iconCenter = (showsPrecipitation ? 8 : 4) + mainSize / 2
+                    let radius = width * 0.69 - iconCenter
+                    let strength = scheme == .dark ? 0.30 : 0.36
                     let phase = context.date.timeIntervalSinceReferenceDate
-                    let drift = moving ? sin(phase * 2 * .pi / 17) * 0.027 : 0
-                    RadialGradient(colors: [tones.0.opacity(scheme == .dark ? 0.31 : 0.16), .clear],
-                                   center: UnitPoint(x: 0.27 + drift, y: 0.70),
-                                   startRadius: 0, endRadius: 58)
-                    RadialGradient(colors: [tones.1.opacity(scheme == .dark ? 0.26 : 0.14), .clear],
-                                   center: UnitPoint(x: 0.81 - drift, y: 0.41),
-                                   startRadius: 0, endRadius: 58)
+                    let drift = moving ? sin(phase * 2 * .pi / 17) * 0.05 : 0
+                    RadialGradient(colors: [color.opacity(strength), color.opacity(strength * 0.57), color.opacity(0)],
+                                   center: UnitPoint(x: iconCenter / width, y: 0.56 + drift),
+                                   startRadius: 0, endRadius: radius)
                 }
             }
         }
