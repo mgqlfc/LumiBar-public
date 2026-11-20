@@ -211,8 +211,14 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
     }()
     private var menuBarWidth: CGFloat { MusicView.entryWidth * 2 + capsuleGap }
     private var showsMusicCapsule: Bool { music.track?.playing == true && !backgrounded }
-    private var weatherStatusImage: NSImage?
+    private var wideWeatherImage: NSImage?
+    private var narrowWeatherImage: NSImage?
+    private var weatherStatusImage: NSImage? { showsMusicCapsule ? narrowWeatherImage : wideWeatherImage }
     private var musicStatusImage: NSImage?
+    private var splitProgress: CGFloat = 0
+    private var splitTarget: CGFloat?
+    private var splitTask: Task<Void, Never>?
+    private var systemAppearanceObservation: NSKeyValueObservation?
     private var lastMusicImageAt = Date.distantPast
     private var lastMusicBars: [Int] = []
     private var lastMusicArt: NSImage?
@@ -263,6 +269,12 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
             expandedPanel.appearance = appearance.windowAppearance
             settings?.appearance = appearance.windowAppearance
             updateStatus()
+        }
+        systemAppearanceObservation = NSApp.observe(\.effectiveAppearance, options: [.new]) { [weak self] _, _ in
+            Task { @MainActor in
+                guard let self, self.appearance.windowAppearance == nil else { return }
+                self.updateStatus()
+            }
         }
         music.onTrackChange = { [weak self] in
             guard let self else { return }
@@ -319,6 +331,8 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        splitTask?.cancel()
+        systemAppearanceObservation?.invalidate()
         timer?.invalidate()
         weatherTimer?.invalidate()
         if let globalClicks { NSEvent.removeMonitor(globalClicks) }
@@ -338,7 +352,7 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
     }
 
     private var musicFrame: NSRect? {
-        guard let image = musicStatusImage, let group = statusImageFrame else { return nil }
+        guard showsMusicCapsule, let image = musicStatusImage, let group = statusImageFrame else { return nil }
         return NSRect(x: group.minX, y: group.minY, width: image.size.width, height: group.height)
     }
 
@@ -355,6 +369,7 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
     }
 
     private func capsuleFrame(at pointer: NSPoint) -> NSRect? {
+        guard splitTask == nil else { return nil }
         if let musicFrame, capsuleContains(pointer, in: musicFrame) { return musicFrame }
         if let statusFrame, capsuleContains(pointer, in: statusFrame) { return statusFrame }
         return nil
@@ -388,13 +403,14 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
         return anchor
     }
 
-    private func buttonScheme(_ button: NSStatusBarButton) -> ColorScheme {
-        button.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? .dark : .light
+    private var statusScheme: ColorScheme {
+        let source = appearance.windowAppearance ?? NSApp.effectiveAppearance
+        return source.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? .dark : .light
     }
 
     private func statusImage<V: View>(_ view: V, button: NSStatusBarButton, size: CGSize) -> NSImage? {
         let renderer = ImageRenderer(content: view.frame(width: size.width, height: size.height)
-            .environment(\.colorScheme, buttonScheme(button)))
+            .environment(\.colorScheme, statusScheme))
         renderer.scale = button.window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2
         let image = renderer.nsImage
         image?.isTemplate = false
@@ -402,6 +418,8 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
     }
 
     private func reportStatusItems() {
+        let mode = statusScheme == .light ? "light" : "dark"
+        logger.notice("Menu bar appearance: \(mode, privacy: .public)")
         let top = NSScreen.screens.first?.frame.maxY ?? 0
         for (name, frame, image) in [("weather", statusFrame, weatherStatusImage), ("music", musicFrame, musicStatusImage)] {
             guard let frame, let image else {
@@ -423,22 +441,94 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
 
     private func updateStatus() {
         guard let button = status.button else { return }
-        let paired = showsMusicCapsule
-        let weatherWidth = paired ? MusicView.entryWidth : menuBarWidth
-        let capsule = WeatherCapsule(model: weather, appearance: appearance, height: capsuleHeight,
-                                     width: weatherWidth, showsPrecipitation: !paired)
+        updateSplitTarget()
         button.appearance = appearance.windowAppearance
         button.imagePosition = .imageOnly
         button.title = ""
-        weatherStatusImage = statusImage(capsule, button: button, size: CGSize(width: weatherWidth, height: capsuleHeight))
+        let wide = WeatherCapsule(model: weather, appearance: appearance, height: capsuleHeight,
+                                  width: menuBarWidth, showsPrecipitation: true)
+        let narrow = WeatherCapsule(model: weather, appearance: appearance, height: capsuleHeight,
+                                    width: MusicView.entryWidth, showsPrecipitation: false)
+        wideWeatherImage = statusImage(wide, button: button, size: CGSize(width: menuBarWidth, height: capsuleHeight))
+        narrowWeatherImage = statusImage(narrow, button: button, size: CGSize(width: MusicView.entryWidth, height: capsuleHeight))
         updateMusicStatusImage(force: true)
         updateStatusAccessibility()
     }
 
+    private func updateSplitTarget() {
+        let target: CGFloat = showsMusicCapsule ? 1 : 0
+        let canAnimate = motion && !backgrounded
+        guard splitTarget != target || (splitTask != nil && !canAnimate) else { return }
+        let needsAnimation = splitTarget != nil && canAnimate && abs(splitProgress - target) > 0.001
+        splitTarget = target
+        splitTask?.cancel()
+        (capsuleInputPanel.contentView as? CapsuleInputView)?.cancelPress()
+        guard needsAnimation else {
+            splitTask = nil
+            splitProgress = target
+            return
+        }
+        let from = splitProgress
+        let duration = max(0.16, 0.46 * abs(target - from))
+        let start = CACurrentMediaTime()
+        splitTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                guard let self else { return }
+                let elapsed = min(1, (CACurrentMediaTime() - start) / duration)
+                let eased = elapsed * elapsed * (3 - 2 * elapsed)
+                splitProgress = from + (target - from) * eased
+                if elapsed >= 1 {
+                    splitTask = nil
+                    if !showsMusicCapsule { musicStatusImage = nil }
+                    displayStatusImages()
+                    return
+                }
+                displayStatusImages()
+                try? await Task.sleep(for: .milliseconds(16))
+            }
+        }
+    }
+
     private func displayStatusImages() {
         guard let button = status.button else { return }
+        if splitTask != nil, let wideWeatherImage, let narrowWeatherImage, let musicStatusImage {
+            let size = CGSize(width: menuBarWidth, height: capsuleHeight)
+            let frame = NSRect(origin: .zero, size: size)
+            let progress = splitProgress
+            let gap = capsuleGap * max(0, (progress - 0.76) / 0.24)
+            let shape = MenuBarCapsuleShape.movingOutline(in: frame, progress: progress, gap: gap).cgPath
+            let x = (size.width + gap) / 2
+            let width = (size.width - gap) / 2
+            func eased(_ value: CGFloat) -> CGFloat {
+                let t = min(1, max(0, value))
+                return t * t * (3 - 2 * t)
+            }
+            let wideOpacity = 1 - eased((progress - 0.18) / 0.31)
+            let pairedOpacity = eased((progress - 0.37) / 0.36)
+            let uncovered = (1 - wideOpacity) * (1 - pairedOpacity)
+            let tint = statusScheme == .dark
+                ? NSColor(srgbRed: 0.24, green: 0.29, blue: 0.37, alpha: 0.70 * uncovered)
+                : NSColor.white.withAlphaComponent(0.74 * uncovered)
+            if status.length != size.width { status.length = size.width }
+            button.image = NSImage(size: size, flipped: false) { _ in
+                guard let context = NSGraphicsContext.current?.cgContext else { return false }
+                context.saveGState()
+                context.addPath(shape)
+                context.clip()
+                tint.setFill()
+                frame.fill()
+                wideWeatherImage.draw(in: frame, from: .zero, operation: .sourceOver, fraction: wideOpacity)
+                musicStatusImage.draw(in: NSRect(x: 0, y: 0, width: width, height: size.height),
+                                      from: .zero, operation: .sourceOver, fraction: pairedOpacity)
+                narrowWeatherImage.draw(in: NSRect(x: x, y: 0, width: width, height: size.height),
+                                       from: .zero, operation: .sourceOver, fraction: pairedOpacity)
+                context.restoreGState()
+                return true
+            }
+            return
+        }
         if let weatherStatusImage {
-            let musicImage = musicStatusImage
+            let musicImage = showsMusicCapsule ? musicStatusImage : nil
             let weatherX = musicImage.map { $0.size.width + capsuleGap } ?? 0
             let size = CGSize(width: weatherX + weatherStatusImage.size.width, height: capsuleHeight)
             if status.length != size.width { status.length = size.width }
@@ -461,11 +551,11 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
         if let forecast = weather.weather {
             let condition = forecast.conditionText ?? Weather.appearance(forecast.code, day: forecast.isDay).name
             label += "，\(condition)，\(weather.temperature(forecast.temperature))"
-            if musicStatusImage == nil, let rain = forecast.rain {
+            if !showsMusicCapsule, let rain = forecast.rain {
                 label += "，降水概率 " + rain.formatted(.number.precision(.fractionLength(0))) + "%"
             }
         }
-        if musicStatusImage != nil, let track = music.track {
+        if showsMusicCapsule, musicStatusImage != nil, let track = music.track {
             label += "，音乐，\(track.title)，\(track.artist)"
             button.setAccessibilityCustomActions([
                 NSAccessibilityCustomAction(name: "开关音乐详情", target: self, selector: #selector(toggleAccessibleMusic))
@@ -501,6 +591,7 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
     }
 
     private func statusPointerReleased(_ type: NSEvent.EventType, at pointer: NSPoint, startedAt start: NSPoint? = nil) {
+        guard splitTask == nil else { return }
         let origin = start ?? pointer
         let musicAnchor = musicFrame
         let weatherAnchor = statusFrame
@@ -593,6 +684,7 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
 
     @objc private func pointerTick() {
         syncCapsuleInputPanel()
+        guard splitTask == nil else { return }
         let pointer = NSEvent.mouseLocation
         let now = Date.now
         if weatherPinned && !weatherPanel.isVisible { weatherPinned = false }
@@ -680,7 +772,7 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
     private func updateMusicStatusImage(force: Bool = false) {
         guard showsMusicCapsule, let button = status.button else {
             if force || musicStatusImage != nil {
-                musicStatusImage = nil
+                if splitTask == nil { musicStatusImage = nil }
                 displayStatusImages()
             }
             return
@@ -696,7 +788,7 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
             let sample = levels[index * levels.count / bandCount]
             return Int((min(1, max(0, sample)) * 11).rounded())
         }
-        let scheme = buttonScheme(button)
+        let scheme = statusScheme
         guard force || bands != lastMusicBars || music.artwork !== lastMusicArt || scheme != lastMusicScheme
             || musicStatusImage == nil else { return }
         lastMusicBars = bands

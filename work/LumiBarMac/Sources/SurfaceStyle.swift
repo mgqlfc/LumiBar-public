@@ -19,6 +19,35 @@ enum MenuBarCapsuleShape {
     static func outline(height: CGFloat) -> RoundedRectangle {
         RoundedRectangle(cornerRadius: height * 0.43)
     }
+
+    static func movingOutline(in bounds: CGRect, progress: CGFloat, gap: CGFloat) -> Path {
+        let middle = bounds.midX
+        let halfHeight = bounds.height / 2
+        let halfGap = gap / 2
+        let halfWidth = bounds.width / 2 - halfGap
+        let capsule = outline(height: bounds.height)
+        var path = capsule.path(in: CGRect(x: bounds.minX, y: bounds.minY, width: halfWidth, height: bounds.height))
+        path.addPath(capsule.path(in: CGRect(x: middle + halfGap, y: bounds.minY, width: halfWidth, height: bounds.height)))
+        guard progress < 0.76 else { return path }
+
+        // The bridge pinches to a single point before the two rounded ends move apart.
+        let shoulder = bounds.height * 0.56
+        let neck = halfHeight * (1 - pow(progress / 0.76, 1.5))
+        let left = middle - shoulder
+        let right = middle + shoulder
+        let inner = shoulder * 0.42
+        let bottom = bounds.midY - neck
+        let top = bounds.midY + neck
+        var bridge = Path()
+        bridge.move(to: CGPoint(x: left, y: bounds.minY))
+        bridge.addQuadCurve(to: CGPoint(x: middle, y: bottom), control: CGPoint(x: middle - inner, y: bottom))
+        bridge.addQuadCurve(to: CGPoint(x: right, y: bounds.minY), control: CGPoint(x: middle + inner, y: bottom))
+        bridge.addLine(to: CGPoint(x: right, y: bounds.maxY))
+        bridge.addQuadCurve(to: CGPoint(x: middle, y: top), control: CGPoint(x: middle + inner, y: top))
+        bridge.addQuadCurve(to: CGPoint(x: left, y: bounds.maxY), control: CGPoint(x: middle - inner, y: top))
+        bridge.closeSubpath()
+        return path.union(bridge)
+    }
 }
 
 struct MenuBarCapsuleChrome: ViewModifier {
