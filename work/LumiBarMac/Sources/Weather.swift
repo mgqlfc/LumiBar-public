@@ -170,10 +170,17 @@ enum WeatherAPI {
         configuration.timeoutIntervalForResource = 18
         return URLSession(configuration: configuration)
     }()
+    private static let minuteTimestampFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd'T'HH:mmXXXXX"
+        return formatter
+    }()
 
     static func date(_ text: String) -> Date? {
         (try? Date.ISO8601FormatStyle(includingFractionalSeconds: true).parse(text))
             ?? (try? Date.ISO8601FormatStyle().parse(text))
+            ?? minuteTimestampFormatter.date(from: text)
     }
 
     static func proxyURL(_ text: String) -> URL? {

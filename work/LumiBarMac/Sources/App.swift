@@ -30,6 +30,7 @@ enum LumiBarApp {
 private final class SurfacePanel: NSPanel {
     private var transition = 0
     private(set) var closing = false
+    var onCancel: (() -> Void)?
     override var canBecomeKey: Bool { true }
 
     init() {
@@ -81,13 +82,15 @@ private final class SurfacePanel: NSPanel {
     }
 
     override func cancelOperation(_ sender: Any?) {
-        orderOut(sender)
+        if let onCancel { onCancel() }
+        else { orderOut(sender) }
     }
 }
 
 @MainActor
 final class LumiBarController: NSObject, NSApplicationDelegate {
     private let preview = ProcessInfo.processInfo.arguments.contains("--preview")
+    private let checkMenuBar = ProcessInfo.processInfo.arguments.contains("--check-menu-bar")
     private let reference = ReferenceRequest.current
     private let logger = Logger(subsystem: "com.lumibar.macos", category: "lifecycle")
     private var previewDomain: String?
@@ -107,7 +110,11 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
     private lazy var music = MusicModel(defaults: defaults)
     private let status = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let weatherPanel = SurfacePanel()
-    private let musicStatus = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+    private let capsuleGap: CGFloat = 4
+    private var menuBarWidth: CGFloat { MusicView.entryWidth * 2 + capsuleGap }
+    private var showsMusicCapsule: Bool { music.track?.playing == true && !backgrounded }
+    private var weatherStatusImage: NSImage?
+    private var musicStatusImage: NSImage?
     private var lastMusicImageAt = Date.distantPast
     private var lastMusicBars: [Int] = []
     private var lastMusicArt: NSImage?
@@ -125,6 +132,7 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
     private var weatherNaturalHeight: CGFloat?
     private var previewTime: Date?
     private var weatherPinned = false
+    private var weatherDismissedUntilExit = false
     private var movingAwayAt: Date?
     private var musicHoverStartsAt: Date?
     private var wasAtMusic = false
@@ -132,22 +140,20 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
     private var backgrounded = false
     private var musicScreen: NSScreen? { NSScreen.screens.first }
     private var motion: Bool { appearance.animation && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
-    private var capsuleHeight: CGFloat { max(12, min(34, NSStatusBar.system.thickness - 4)) }
+    private var capsuleHeight: CGFloat { max(12, min(34, NSStatusBar.system.thickness)) }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if let reference {
             status.isVisible = false
-            musicStatus.isVisible = false
             showReference(reference)
             return
         }
         status.button?.target = self
-        status.button?.action = #selector(weatherClicked)
+        status.button?.action = #selector(statusClicked)
         status.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
         status.button?.setAccessibilityLabel("LumiBar 天气")
-        musicStatus.button?.target = self
-        musicStatus.button?.action = #selector(musicClicked)
-        musicStatus.isVisible = false
+        weatherPanel.onCancel = { [weak self] in self?.dismissWeather() }
+        expandedPanel.onCancel = { [weak self] in self?.dismissMusic() }
         weather.onChange = { [weak self] in self?.updateStatus() }
         appearance.onEntryChange = { [weak self] in self?.updateStatus() }
         appearance.onThemeChange = { [weak self] in
@@ -155,11 +161,13 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
             weatherPanel.appearance = appearance.windowAppearance
             expandedPanel.appearance = appearance.windowAppearance
             settings?.appearance = appearance.windowAppearance
-            musicStatus.button?.appearance = appearance.windowAppearance
             updateStatus()
-            updateMusicStatusImage(force: true)
         }
-        music.onTrackChange = { [weak self] in self?.layoutMusic() }
+        music.onTrackChange = { [weak self] in
+            guard let self else { return }
+            updateStatus()
+            layoutMusic()
+        }
         expandedPanel.contentView = NSHostingView(rootView: MusicView(model: music, appearance: appearance,
             surface: .expanded) { [weak self] in self?.toggleLyrics() })
 
@@ -200,7 +208,7 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
         }
         updateStatus()
         if arguments.contains("--settings") { showSettings() }
-        if arguments.contains("--check-menu-bar") {
+        if checkMenuBar {
             Task { @MainActor [weak self] in
                 try? await Task.sleep(for: .milliseconds(750))
                 self?.reportStatusItems()
@@ -222,8 +230,21 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
         if !preview { weather.refresh() }
     }
 
-    private var statusFrame: NSRect? { entryFrame(status) }
-    private var musicFrame: NSRect? { entryFrame(musicStatus) }
+    private var statusFrame: NSRect? {
+        guard var frame = entryFrame(status) else { return nil }
+        if musicStatusImage != nil {
+            let offset = MusicView.entryWidth + capsuleGap / 2
+            frame.origin.x += offset
+            frame.size.width -= offset
+        }
+        return frame
+    }
+
+    private var musicFrame: NSRect? {
+        guard musicStatusImage != nil, var frame = entryFrame(status) else { return nil }
+        frame.size.width = MusicView.entryWidth + capsuleGap / 2
+        return frame
+    }
 
     private func entryFrame(_ item: NSStatusItem) -> NSRect? {
         guard item.isVisible, let button = item.button, let window = button.window else { return nil }
@@ -250,8 +271,8 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
 
     private func reportStatusItems() {
         let top = NSScreen.screens.first?.frame.maxY ?? 0
-        for (name, item) in [("weather", status), ("music", musicStatus)] {
-            guard let frame = entryFrame(item), let image = item.button?.image else {
+        for (name, frame, image) in [("weather", statusFrame, weatherStatusImage), ("music", musicFrame, musicStatusImage)] {
+            guard let frame, let image else {
                 logger.notice("Menu bar \(name, privacy: .public): no active item")
                 continue
             }
@@ -270,55 +291,113 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
 
     private func updateStatus() {
         guard let button = status.button else { return }
-        let capsule = WeatherCapsule(model: weather, appearance: appearance, lite: appearance.weatherLite, height: capsuleHeight)
+        let paired = showsMusicCapsule
+        let weatherWidth = paired ? MusicView.entryWidth : menuBarWidth
+        let capsule = WeatherCapsule(model: weather, appearance: appearance, height: capsuleHeight,
+                                     width: weatherWidth, showsPrecipitation: !paired)
         button.appearance = appearance.windowAppearance
-        let size = CGSize(width: capsule.idealWidth + 4, height: capsuleHeight)
-        status.length = size.width
         button.imagePosition = .imageOnly
         button.title = ""
-        if let image = statusImage(capsule, button: button, size: size) {
-            button.image = image
+        weatherStatusImage = statusImage(capsule, button: button, size: CGSize(width: weatherWidth, height: capsuleHeight))
+        updateMusicStatusImage(force: true)
+        updateStatusAccessibility()
+    }
+
+    private func displayStatusImages() {
+        guard let button = status.button else { return }
+        if let weatherStatusImage {
+            let musicImage = musicStatusImage
+            let weatherX = musicImage.map { $0.size.width + capsuleGap } ?? 0
+            let size = CGSize(width: weatherX + weatherStatusImage.size.width, height: capsuleHeight)
+            if status.length != size.width { status.length = size.width }
+            button.image = NSImage(size: size, flipped: false) { _ in
+                musicImage?.draw(in: NSRect(origin: .zero, size: musicImage?.size ?? .zero))
+                weatherStatusImage.draw(in: NSRect(x: weatherX, y: 0, width: weatherStatusImage.size.width, height: size.height))
+                return true
+            }
         } else {
             status.length = NSStatusItem.squareLength
             let image = NSImage(systemSymbolName: "cloud.sun", accessibilityDescription: nil)
             image?.isTemplate = true
             button.image = image
         }
-        if let forecast = weather.weather {
-            let condition = forecast.conditionText ?? Weather.appearance(forecast.code, day: forecast.isDay).name
-            let rain = forecast.rain.map { "，降水概率 " + $0.formatted(.number.precision(.fractionLength(0))) + "%" } ?? ""
-            button.setAccessibilityLabel("LumiBar 天气，\(condition)，\(weather.temperature(forecast.temperature))\(rain)")
-        } else {
-            button.setAccessibilityLabel("LumiBar 天气")
-        }
     }
 
-    @objc private func musicClicked() { toggleLyrics() }
+    private func updateStatusAccessibility() {
+        guard let button = status.button else { return }
+        var label = "LumiBar 天气"
+        if let forecast = weather.weather {
+            let condition = forecast.conditionText ?? Weather.appearance(forecast.code, day: forecast.isDay).name
+            label += "，\(condition)，\(weather.temperature(forecast.temperature))"
+            if musicStatusImage == nil, let rain = forecast.rain {
+                label += "，降水概率 " + rain.formatted(.number.precision(.fractionLength(0))) + "%"
+            }
+        }
+        if musicStatusImage != nil, let track = music.track {
+            label += "，音乐，\(track.title)，\(track.artist)"
+            button.setAccessibilityCustomActions([
+                NSAccessibilityCustomAction(name: "开关音乐详情", target: self, selector: #selector(toggleAccessibleMusic))
+            ])
+        } else {
+            button.setAccessibilityCustomActions([])
+        }
+        button.setAccessibilityLabel(label)
+    }
 
-    @objc private func weatherClicked(_ sender: NSStatusBarButton) {
+    @objc private func toggleAccessibleMusic() -> Bool {
+        guard music.track != nil else { return false }
+        toggleLyrics()
+        return true
+    }
+
+    private func showStatusMenu(_ sender: NSStatusBarButton) {
+        dismissWeather()
+        dismissMusic()
+        let menu = NSMenu()
+        menu.addItem(withTitle: "LumiBar 设置…", action: #selector(showSettings), keyEquivalent: ",").target = self
+        menu.addItem(.separator())
+        menu.addItem(withTitle: "退出 LumiBar", action: #selector(quit), keyEquivalent: "q").target = self
+        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.height), in: sender)
+    }
+
+    @objc private func statusClicked(_ sender: NSStatusBarButton) {
         if NSApp.currentEvent?.type == .rightMouseUp {
-            weatherPinned = false
-            weatherPanel.dismiss(duration: motion ? 0.18 : 0)
-            let menu = NSMenu()
-            menu.addItem(withTitle: "LumiBar 设置…", action: #selector(showSettings), keyEquivalent: ",").target = self
-            menu.addItem(.separator())
-            menu.addItem(withTitle: "退出 LumiBar", action: #selector(quit), keyEquivalent: "q").target = self
-            menu.popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.height), in: sender)
+            showStatusMenu(sender)
             return
         }
         let cursor = NSEvent.mouseLocation
+        if musicFrame?.contains(cursor) == true {
+            toggleLyrics()
+            return
+        }
+        if weatherPinned && weatherPanel.isVisible {
+            dismissWeather()
+            return
+        }
+        dismissMusic()
         let anchor = statusFrame ?? NSRect(x: cursor.x - 10, y: cursor.y - 14, width: 20, height: 28)
-        weatherPinned.toggle()
+        weatherPinned = true
+        weatherDismissedUntilExit = false
         pointedAtWeather = nil
-        if weatherPinned { showWeather(anchor: anchor, compact: false) }
-        else { weatherPanel.dismiss(duration: motion ? 0.18 : 0) }
+        weatherLeaveAt = nil
+        showWeather(anchor: anchor, compact: false)
+        if checkMenuBar { logger.notice("Menu bar weather detail opened") }
+    }
+
+    private func dismissWeather() {
+        if checkMenuBar && weatherPinned { logger.notice("Menu bar weather detail closed") }
+        weatherPinned = false
+        weatherDismissedUntilExit = true
+        pointedAtWeather = nil
+        weatherLeaveAt = nil
+        weatherPanel.dismiss(duration: motion ? 0.18 : 0)
     }
 
     private func showWeather(anchor: NSRect, compact: Bool) {
         guard let screen = NSScreen.screens.first(where: { $0.frame.contains(.init(x: anchor.midX, y: anchor.midY)) })
                 ?? musicScreen else { return }
         let width = min(compact ? 296 : 512, screen.visibleFrame.width)
-        let maxHeight = max(180, anchor.minY - screen.visibleFrame.minY + 12)
+        let maxHeight = max(180, anchor.minY - screen.visibleFrame.minY)
         let initial = compact ? 192 : weatherNaturalHeight ?? (weather.weather == nil ? 275 : 742)
         let height = min(CGFloat(initial), maxHeight)
         weatherHeightLimit = maxHeight
@@ -326,6 +405,7 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
         let generation = weatherLayoutGeneration
         let x = max(screen.visibleFrame.minX, min(anchor.midX - width / 2, screen.visibleFrame.maxX - width))
         weatherPanel.appearance = appearance.windowAppearance
+        weatherPanel.title = compact ? "LumiBar 天气速览" : "LumiBar 天气详情"
         let view = NSHostingView(rootView: WeatherView(model: weather, appearance: appearance, compact: compact,
             width: width, height: nil, referenceDate: previewTime, measured: { [weak self] value in
                 Task { @MainActor in self?.resizeWeather(to: value, generation: generation) }
@@ -334,11 +414,12 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
         view.sizingOptions = []
         weatherPanel.contentView = view
         weatherPanel.ignoresMouseEvents = false
-        weatherPanel.present(NSRect(x: x, y: anchor.minY + 12 - height, width: width, height: height), key: !compact)
+        // The transparent edge of the panel still receives mouse events.
+        weatherPanel.present(NSRect(x: x, y: anchor.minY - height, width: width, height: height), key: !compact)
     }
 
     private func resizeWeather(to desired: CGFloat, generation: Int) {
-        guard generation == weatherLayoutGeneration, desired.isFinite, weatherPanel.isVisible else { return }
+        guard generation == weatherLayoutGeneration, desired.isFinite, weatherPanel.isVisible, !weatherPanel.closing else { return }
         weatherNaturalHeight = max(174, ceil(desired))
         let old = weatherPanel.frame
         let height = min(weatherHeightLimit, weatherNaturalHeight ?? old.height)
@@ -353,14 +434,13 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
 
     private func outsideClick() {
         let pointer = NSEvent.mouseLocation
+        guard entryFrame(status)?.contains(pointer) != true else { return }
         if weatherPinned, weatherPanel.isVisible, !weatherPanel.frame.contains(pointer),
-           statusFrame?.contains(pointer) != true {
-            weatherPinned = false
-            weatherPanel.dismiss(duration: motion ? 0.18 : 0)
+           !weatherPanel.closing {
+            dismissWeather()
         }
-        if music.mode == .lyrics, musicFrame?.contains(pointer) != true, !expandedPanel.frame.contains(pointer) {
-            music.mode = .compact
-            layoutMusic()
+        if music.mode == .lyrics, !expandedPanel.frame.contains(pointer) {
+            dismissMusic()
         }
     }
 
@@ -368,7 +448,12 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
         let pointer = NSEvent.mouseLocation
         let now = Date.now
         if weatherPinned && !weatherPanel.isVisible { weatherPinned = false }
-        if !weatherPinned, let anchor = statusFrame {
+        let anchor = statusFrame
+        if weatherDismissedUntilExit, anchor?.contains(pointer) != true,
+           !weatherPanel.isVisible || !weatherPanel.frame.contains(pointer) {
+            weatherDismissedUntilExit = false
+        }
+        if music.mode == .compact, !weatherPinned, !weatherDismissedUntilExit, let anchor {
             if anchor.contains(pointer) {
                 weatherLeaveAt = nil
                 if weatherPanel.closing { weatherPanel.present(weatherPanel.frame) }
@@ -405,8 +490,9 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
             musicDismissedUntilExit = false
         }
         wasAtMusic = hovering
-        if music.mode == .compact, hovering, !musicDismissedUntilExit,
+        if !weatherPinned, music.mode == .compact, hovering, !musicDismissedUntilExit,
            let began = musicHoverStartsAt, now.timeIntervalSince(began) >= 0.32 {
+            dismissWeather()
             music.mode = .controls
             layoutMusic()
         } else if music.mode == .controls, !hovering {
@@ -420,105 +506,113 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
             movingAwayAt = nil
         }
         if music.mode != .compact && !expandedPanel.isVisible {
-            music.mode = .compact
-            musicDismissedUntilExit = true
+            dismissMusic()
         }
     }
 
     private func toggleLyrics() {
         if music.mode == .lyrics {
-            music.mode = .compact
-            musicDismissedUntilExit = true
+            dismissMusic()
         } else {
+            dismissWeather()
             music.mode = .lyrics
+            layoutMusic()
+            if checkMenuBar { logger.notice("Menu bar music detail opened") }
         }
+    }
+
+    private func dismissMusic() {
+        if checkMenuBar && music.mode == .lyrics { logger.notice("Menu bar music detail closed") }
+        music.mode = .compact
+        musicDismissedUntilExit = true
         layoutMusic()
     }
 
     private func updateMusicStatusImage(force: Bool = false) {
-        guard let track = music.track, musicStatus.isVisible, let button = musicStatus.button else { return }
+        guard showsMusicCapsule, let button = status.button else {
+            if force || musicStatusImage != nil {
+                musicStatusImage = nil
+                displayStatusImages()
+            }
+            return
+        }
         let now = Date.now
         guard force || now.timeIntervalSince(lastMusicImageAt) > 0.09 else { return }
         lastMusicImageAt = now
-        let levels = music.previewSpectrum ?? (music.spectrumEnabled && track.playing
+        let levels = music.previewSpectrum ?? (music.spectrumEnabled
             && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? music.spectrum.levels : [])
-        let bands = (0..<8).map { index -> Int in
+        let bandCount = 5
+        let bands = (0..<bandCount).map { index -> Int in
             guard !levels.isEmpty else { return 0 }
-            let sample = levels[min(levels.count - 1, index * levels.count / 8)]
+            let sample = levels[index * levels.count / bandCount]
             return Int((min(1, max(0, sample)) * 11).rounded())
         }
         let scheme = buttonScheme(button)
-        guard force || bands != lastMusicBars || music.artwork !== lastMusicArt || scheme != lastMusicScheme else { return }
+        guard force || bands != lastMusicBars || music.artwork !== lastMusicArt || scheme != lastMusicScheme
+            || musicStatusImage == nil else { return }
         lastMusicBars = bands
         lastMusicArt = music.artwork
         lastMusicScheme = scheme
         let entry = MusicView(model: music, appearance: appearance, surface: .entry(capsuleHeight, bands)) { }
-        button.imagePosition = .imageOnly
-        button.title = ""
-        button.image = statusImage(entry, button: button, size: CGSize(width: 63, height: capsuleHeight))
-            ?? NSImage(systemSymbolName: "music.note", accessibilityDescription: nil)
+        musicStatusImage = statusImage(entry, button: button, size: CGSize(width: MusicView.entryWidth, height: capsuleHeight))
+        displayStatusImages()
     }
 
     private func layoutMusic() {
-        guard let track = music.track, !backgrounded else {
-            musicStatus.isVisible = false
+        guard music.track != nil, !backgrounded else {
+            music.mode = .compact
             expandedPanel.dismiss(duration: motion ? 0.18 : 0)
             return
         }
-        musicStatus.length = 63
-        musicStatus.isVisible = true
-        guard let button = musicStatus.button else { return }
-        button.appearance = appearance.windowAppearance
-        updateMusicStatusImage(force: true)
-        button.setAccessibilityLabel("LumiBar 音乐，\(track.title)，\(track.artist)")
         guard music.mode != .compact else {
             expandedPanel.dismiss(duration: motion ? 0.18 : 0)
             return
         }
-        let anchor = musicFrame
+        let anchor = musicFrame ?? statusFrame
         let screen = anchor.flatMap { rect in NSScreen.screens.first { $0.frame.contains(.init(x: rect.midX, y: rect.midY)) } } ?? musicScreen
         guard let screen else { return }
         let lyrics = music.mode == .lyrics
         let width = min(lyrics ? 452 : 342, screen.visibleFrame.width)
         let menuBottom = min(screen.frame.maxY - screen.safeAreaInsets.top, screen.visibleFrame.maxY)
-        let top = (anchor?.minY ?? menuBottom) + (lyrics ? 11 : -3)
+        let top = (anchor?.minY ?? menuBottom) - (lyrics ? 0 : 3)
         let height = lyrics ? min(682, max(220, top - screen.visibleFrame.minY - 5)) : 78
-        let center = lyrics ? screen.frame.midX : anchor?.midX ?? screen.frame.midX
+        let center = anchor?.midX ?? screen.frame.midX
         let x = max(screen.visibleFrame.minX, min(center - width / 2, screen.visibleFrame.maxX - width))
         expandedPanel.appearance = appearance.windowAppearance
+        expandedPanel.title = lyrics ? "LumiBar 音乐详情" : "LumiBar 播放控制"
         expandedPanel.present(.init(x: x, y: top - height, width: width, height: height))
     }
 
     @objc private func screensChanged() {
-        weatherPanel.orderOut(nil)
-        weatherPinned = false
+        dismissWeather()
         updateStatus()
         layoutMusic()
     }
 
     @objc private func spaceChanged() {
-        weatherPanel.orderOut(nil)
-        weatherPinned = false
-        if !preview { music.mode = .compact }
-        layoutMusic()
+        dismissWeather()
+        if !preview { dismissMusic() }
+        else { layoutMusic() }
     }
 
     @objc private func sleeping() {
         backgrounded = true
         music.spectrum.stop()
+        updateStatus()
         layoutMusic()
     }
 
     @objc private func woke() {
         backgrounded = false
         if music.spectrumEnabled { music.restartSpectrum() }
+        updateStatus()
         layoutMusic()
         refreshWeather()
     }
 
     @objc private func showSettings() {
-        weatherPinned = false
-        weatherPanel.dismiss(duration: motion ? 0.18 : 0)
+        dismissWeather()
+        dismissMusic()
         if settings == nil {
             let window = SurfacePanel()
             window.level = .floating
@@ -556,7 +650,9 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
         case .settings:
             content = AnyView(SettingsView(appearance: appearance, weather: weather, music: music) { NSApp.terminate(nil) })
         case .capsule, .lite, .wide:
-            content = AnyView(WeatherCapsule(model: weather, appearance: appearance, lite: request.scene == .lite, height: 34))
+            let narrow = request.scene == .lite
+            content = AnyView(WeatherCapsule(model: weather, appearance: appearance, height: 34,
+                width: narrow ? MusicView.entryWidth : menuBarWidth, showsPrecipitation: !narrow))
         case .weather, .hover, .alerts:
             content = AnyView(WeatherView(model: weather, appearance: appearance, compact: request.scene == .hover,
                 width: size.width, height: size.height, referenceDate: previewTime, showSettings: {}, quit: {}))

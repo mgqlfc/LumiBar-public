@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct MusicView: View {
+    static let entryWidth: CGFloat = 50
     enum Surface { case entry(CGFloat, [Int]), expanded }
     let model: MusicModel
     let appearance: AppearanceModel
@@ -13,19 +14,19 @@ struct MusicView: View {
         if let track = model.track {
             switch surface {
             case .entry(let height, let bands):
-                HStack(spacing: 6) {
+                HStack(spacing: 4) {
                     cover(size: min(21, height - 4))
-                    HStack(alignment: .center, spacing: 1.5) {
+                    HStack(alignment: .center, spacing: 1.6) {
                         ForEach(bands.indices, id: \.self) { index in
                             Capsule()
                                 .fill(Color.primary.opacity(bands[index] == 0 ? 0.32 : 0.78))
-                                .frame(width: 1.5, height: 2 + CGFloat(bands[index]))
+                                .frame(width: 1.8, height: 2 + CGFloat(bands[index]))
                         }
-                    }.frame(width: 24, height: 13)
+                    }.frame(width: 18, height: 13)
                 }
-                .frame(width: 59, height: height)
-                .background(model.colors[0].opacity(colorScheme == .dark ? 0.20 : 0.14), in: Capsule())
-                .accessibilityHidden(true)
+                .frame(width: Self.entryWidth, height: height)
+                .background(model.colors[0].opacity(colorScheme == .dark ? 0.24 : 0.17))
+                .modifier(MenuBarCapsuleChrome(height: height))
             case .expanded:
                 if model.mode == .lyrics { lyricsPanel(track) }
                 else { hoverPanel(track) }

@@ -15,47 +15,59 @@ struct FlyoutChrome: ViewModifier {
     }
 }
 
+struct MenuBarCapsuleChrome: ViewModifier {
+    let height: CGFloat
+    @Environment(\.colorScheme) private var scheme
+
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: height * 0.43)
+        content
+            .background(shape.fill(scheme == .dark ? Color(red: 0.24, green: 0.29, blue: 0.37).opacity(0.70) : .white.opacity(0.55)))
+            .clipShape(shape)
+            .overlay {
+                shape.strokeBorder(.linearGradient(colors: [.white.opacity(scheme == .dark ? 0.20 : 0.76),
+                                                            .white.opacity(scheme == .dark ? 0.04 : 0.16)],
+                                                    startPoint: .top, endPoint: .bottom), lineWidth: 1)
+            }
+            .accessibilityHidden(true)
+    }
+}
+
 struct WeatherCapsule: View {
     let model: WeatherModel
     let appearance: AppearanceModel
-    let lite: Bool
     let height: CGFloat
+    let width: CGFloat
+    let showsPrecipitation: Bool
     @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private var mainSize: CGFloat { min(lite ? 22 : 24, height - 3) }
-    private var gap: CGFloat { lite ? 3 : 4 }
+    private var mainSize: CGFloat { min(22, height - 3) }
     private var rainText: String? {
-        guard !lite, let rain = model.weather?.rain else { return nil }
+        guard showsPrecipitation, let rain = model.weather?.rain else { return nil }
         return rain.formatted(.number.precision(.fractionLength(0))) + "%"
     }
 
-    var idealWidth: CGFloat {
-        guard let weather = model.weather else { return max(28, mainSize + 10) }
-        let tempWidth = appearance.textWidth(model.temperature(weather.temperature), size: 15, semibold: true)
-        let rainWidth = rainText.map { gap + min(14, height - 6) + 2 + appearance.textWidth($0, size: 11) } ?? 0
-        return max(lite ? 64 : 104, ceil(20 + mainSize + gap + tempWidth + rainWidth))
-    }
-
     var body: some View {
-        let shape = Capsule()
-        HStack(spacing: gap) {
+        HStack(spacing: 3) {
             WeatherIcon(code: model.weather?.code ?? 2, day: model.weather?.isDay, size: mainSize)
             if let weather = model.weather {
                 appearance.styledText(model.temperature(weather.temperature), size: 15, weight: .semibold)
-                    .fixedSize(horizontal: true, vertical: false)
-                if let rainText {
-                    HStack(spacing: 2) {
-                        WeatherIcon(code: 61, day: true, size: min(14, height - 6)).accessibilityHidden(true)
-                        appearance.styledText(rainText, size: 11).opacity(0.85)
-                            .fixedSize(horizontal: true, vertical: false)
-                    }
+                    .lineLimit(1).minimumScaleFactor(0.60)
+                    .layoutPriority(1)
+            }
+            if let rainText {
+                Spacer(minLength: 1)
+                HStack(spacing: 2) {
+                    WeatherIcon(code: 61, day: true, size: min(14, height - 5))
+                    appearance.styledText(rainText, size: 11).opacity(0.85)
+                        .lineLimit(1).minimumScaleFactor(0.75)
                 }
             }
         }
-        .frame(width: idealWidth, height: height)
+        .padding(.horizontal, showsPrecipitation ? 8 : 4)
+        .frame(width: width, height: height)
         .background {
-            shape.fill(scheme == .dark ? Color(red: 0.24, green: 0.29, blue: 0.37).opacity(0.70) : .white.opacity(0.55))
             if let weather = model.weather {
                 let moving = appearance.animation && !reduceMotion
                 TimelineView(.animation(minimumInterval: 1 / 18, paused: !moving)) { context in
@@ -69,15 +81,9 @@ struct WeatherCapsule: View {
                                    center: UnitPoint(x: 0.81 - drift, y: 0.41),
                                    startRadius: 0, endRadius: 58)
                 }
-                .clipShape(shape)
             }
         }
-        .overlay {
-            shape.strokeBorder(.linearGradient(colors: [.white.opacity(scheme == .dark ? 0.20 : 0.76),
-                                                        .white.opacity(scheme == .dark ? 0.04 : 0.16)],
-                                                startPoint: .top, endPoint: .bottom), lineWidth: 1)
-        }
-        .accessibilityHidden(true)
+        .modifier(MenuBarCapsuleChrome(height: height))
     }
 }
 

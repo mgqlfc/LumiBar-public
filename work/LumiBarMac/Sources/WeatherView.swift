@@ -339,7 +339,7 @@ struct WeatherView: View {
         return HStack(spacing: 12) {
             WeatherIcon(code: weather.code, day: weather.isDay, size: 68)
                 .background { weatherGlow(weather).frame(width: 215, height: 194).allowsHitTesting(false) }
-            appearance.styledText(degrees(weather.temperature) + (model.fahrenheit ? "F" : "C"), size: 52)
+            appearance.styledText(degrees(weather.temperature) + (model.fahrenheit ? "F" : "C"), size: 52, weight: .light)
                 .fixedSize().accessibilityLabel("实况温度 " + degrees(weather.temperature))
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 4) {
@@ -434,7 +434,7 @@ struct WeatherView: View {
             }
             .frame(width: 144, alignment: .leading)
             Canvas { context, size in
-                let left: CGFloat = 28, top: CGFloat = 22, bottom: CGFloat = 57
+                let left: CGFloat = 40, top: CGFloat = 13, bottom: CGFloat = 57
                 let width = max(1, size.width - left - 3)
                 let label = Color.secondary
                 for tick in 0...2 {
@@ -444,10 +444,10 @@ struct WeatherView: View {
                     grid.move(to: CGPoint(x: left, y: y))
                     grid.addLine(to: CGPoint(x: left + width, y: y))
                     context.stroke(grid, with: .color(.secondary.opacity(0.16)), lineWidth: 1)
-                    context.draw(appearance.styledText(decimal(peak * fraction, digits: 0), size: 9).foregroundStyle(label),
-                                 at: CGPoint(x: 0, y: y), anchor: .leading)
+                    let amount = decimal(peak * fraction, digits: 0) + " mm"
+                    context.draw(appearance.styledText(amount, size: 9).foregroundStyle(label),
+                                 at: CGPoint(x: left - 5, y: y), anchor: .trailing)
                 }
-                context.draw(appearance.styledText("mm", size: 9).foregroundStyle(label), at: CGPoint(x: 0, y: 5), anchor: .leading)
                 for (fraction, text, anchor) in [(0.0, "现在", UnitPoint.leading), (0.5, "30 分钟", .center), (1.0, "60 分钟", .trailing)] {
                     context.draw(appearance.styledText(text, size: 9).foregroundStyle(label),
                                  at: CGPoint(x: left + fraction * width, y: 67), anchor: anchor)
@@ -622,7 +622,7 @@ struct WeatherView: View {
                 Text(title).foregroundStyle(.secondary)
             }.font(.system(size: 10)).lineLimit(1).minimumScaleFactor(0.75).frame(height: 20)
             HStack(alignment: .firstTextBaseline, spacing: 3) {
-                appearance.styledText(value, size: 16, weight: .semibold)
+                appearance.styledText(value, size: 16, weight: .medium)
                 if let note { appearance.styledText(note, size: 10).foregroundStyle(.secondary) }
             }.lineLimit(1).minimumScaleFactor(0.74).frame(height: 28)
         }.frame(maxWidth: .infinity)

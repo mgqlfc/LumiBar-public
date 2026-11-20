@@ -39,9 +39,6 @@ final class AppearanceModel {
     private let defaults: UserDefaults
     var onThemeChange: (() -> Void)?
     var onEntryChange: (() -> Void)?
-    var weatherLite: Bool {
-        didSet { defaults.set(weatherLite, forKey: "appearance.weatherLite"); onEntryChange?() }
-    }
     var westernFont: String {
         didSet { defaults.set(westernFont, forKey: "appearance.westernFont"); onEntryChange?() }
     }
@@ -86,7 +83,6 @@ final class AppearanceModel {
 
     init(defaults: UserDefaults) {
         self.defaults = defaults
-        weatherLite = defaults.bool(forKey: "appearance.weatherLite")
         westernFont = defaults.string(forKey: "appearance.westernFont") ?? ""
         chineseFont = defaults.string(forKey: "appearance.chineseFont") ?? ""
         let size = defaults.object(forKey: "appearance.lyricsSize") as? Double ?? 22
@@ -223,8 +219,7 @@ struct SettingsView: View {
                     case .appearance: appearancePage
                     case .entries:
                         VStack(alignment: .leading, spacing: 18) {
-                            heading("菜单栏", "调整天气和音乐入口")
-                            Toggle("精简天气胶囊", isOn: $appearance.weatherLite)
+                            heading("菜单栏", "调整菜单栏入口")
                             Toggle("显示音乐入口", isOn: $music.showMusic)
                         }.padding(24).frame(maxWidth: .infinity, alignment: .leading)
                     case .weather: weatherPage
@@ -327,7 +322,7 @@ struct SettingsView: View {
                         Image(nsImage: glyph).resizable().scaledToFit().frame(width: 20, height: 20)
                     }
                     Text(weather.weather.map { weather.temperature($0.temperature) } ?? "3°")
-                }.padding(8).background(.primary.opacity(0.08), in: Capsule())
+                }.padding(8).background(.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 11))
             }
             .padding(8).glassEffect(.regular, in: RoundedRectangle(cornerRadius: 18))
             percentControl("着色浓度", value: $appearance.coverBlend, range: 0.08...0.55)

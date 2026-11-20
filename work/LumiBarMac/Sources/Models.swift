@@ -354,7 +354,7 @@ final class MusicModel {
             loadMetadata()
         }
         if previous?.playing != next?.playing || previous?.pid != next?.pid { updateSpectrum() }
-        if previous?.key != next?.key { onTrackChange?() }
+        if previous?.key != next?.key || previous?.playing != next?.playing { onTrackChange?() }
     }
 
     private func loadMetadata() {
