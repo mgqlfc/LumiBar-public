@@ -133,6 +133,7 @@ struct WeatherView: View {
     @ViewState private var selectedAlert: Weather.Alert?
     @ViewState private var allAlerts = false
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         GeometryReader { geometry in
@@ -198,13 +199,14 @@ struct WeatherView: View {
         let condition = Weather.appearance(weather.code, day: weather.isDay)
         return VStack(spacing: 7) {
             HStack(alignment: .center, spacing: 6) {
-                WeatherIcon(code: weather.code, day: weather.isDay, size: 30)
+                WeatherIcon(code: weather.code, day: weather.isDay, size: 30, centersArtwork: true)
                     .background { weatherGlow(weather).frame(width: 194, height: 190).allowsHitTesting(false) }
-                appearance.styledText(model.city?.name ?? "天气", size: 15, weight: .semibold).lineLimit(1)
-                appearance.styledText(weather.conditionText ?? condition.name, size: 11)
-                    .foregroundStyle(.secondary).lineLimit(1)
+                    .offset(y: -2)
+                appearance.styledText(model.city?.name ?? "天气", size: 15, weight: .medium).lineLimit(1)
+                appearance.styledText(weather.conditionText ?? condition.name, size: 12, weight: .medium)
+                    .lineLimit(1)
                 appearance.styledText(degrees(weather.temperature) + (model.fahrenheit ? "F" : "C"),
-                                      size: 24, weight: .semibold).fixedSize()
+                                      size: 24).fixedSize()
             }.frame(height: 40)
             HStack(alignment: .top, spacing: 10) {
                 hoverReading("体感", degrees(weather.feelsLike), "当前", "thermometer.medium")
@@ -218,10 +220,10 @@ struct WeatherView: View {
         VStack(spacing: 3) {
             HStack(spacing: 4) {
                 if let symbol { Image(systemName: symbol).font(.system(size: 11, weight: .light)).foregroundStyle(accent) }
-                else { WeatherIcon(code: 61, day: true, size: 13) }
+                else { WeatherIcon(code: 61, day: true, size: 13, centersArtwork: true) }
                 appearance.styledText(label, size: 11).foregroundStyle(.secondary)
             }.frame(height: 18)
-            appearance.styledText(reading, size: 22, weight: .semibold).frame(height: 31)
+            appearance.styledText(reading, size: 22).frame(height: 31)
             appearance.styledText(caption, size: 10).foregroundStyle(.secondary).lineLimit(1).frame(height: 17)
         }.frame(maxWidth: .infinity)
     }
@@ -262,9 +264,11 @@ struct WeatherView: View {
                                 }.padding(16).frame(maxWidth: 300, alignment: .leading)
                             }
                     }
+                    Spacer(minLength: 8)
                     if !status.isEmpty { Text(status) }
                 }
                 .font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                .padding(.leading, 9)
             }
         }
     }
@@ -378,12 +382,17 @@ struct WeatherView: View {
         let condition = Weather.appearance(weather.code, day: weather.isDay)
         return HStack(spacing: 12) {
             WeatherIcon(code: weather.code, day: weather.isDay, size: 68, centersArtwork: true)
-                .background { weatherGlow(weather).frame(width: 215, height: 194).allowsHitTesting(false) }
+                .background {
+                    weatherGlow(weather, expanded: true).frame(width: 334, height: 244)
+                        .offset(x: 64, y: 13).allowsHitTesting(false)
+                }
+                .offset(y: -3)
             appearance.styledText(degrees(weather.temperature) + (model.fahrenheit ? "F" : "C"), size: 52, weight: .light)
                 .fixedSize().accessibilityLabel("实况温度 " + degrees(weather.temperature))
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 4) {
-                    appearance.styledText(weather.conditionText ?? condition.name, size: 18).lineLimit(1)
+                    appearance.styledText(weather.conditionText ?? condition.name, size: 20, weight: .medium)
+                        .lineLimit(1).layoutPriority(1)
                     alertBadges(weather)
                 }
                 if let today = weather.days.first {
@@ -397,14 +406,22 @@ struct WeatherView: View {
         }
     }
 
-    private func weatherGlow(_ weather: Weather) -> some View {
+    private func weatherGlow(_ weather: Weather, expanded: Bool = false) -> some View {
         let tones = WeatherLight.colors(code: weather.code, day: weather.isDay)
-        let strength = colorScheme == .dark ? 0.29 : 0.18
-        return ZStack {
-            RadialGradient(colors: [tones.1.opacity(strength * 0.58), .clear],
-                           center: UnitPoint(x: 0.54, y: 0.49), startRadius: 2, endRadius: 89)
-            RadialGradient(colors: [tones.0.opacity(strength), .clear],
-                           center: .center, startRadius: 3, endRadius: 72)
+        let strength = expanded ? (colorScheme == .dark ? 0.47 : 0.34) : (colorScheme == .dark ? 0.29 : 0.18)
+        let moving = expanded && appearance.animation && !reduceMotion
+        return TimelineView(.animation(minimumInterval: 1 / 24, paused: !moving)) { context in
+            let phase = context.date.timeIntervalSinceReferenceDate * 2 * .pi / 11
+            let sweep = moving ? sin(phase) * 0.11 : 0
+            let drift = moving ? cos(phase) * 0.08 : 0
+            ZStack {
+                RadialGradient(colors: [tones.1.opacity(strength * (expanded ? 0.72 : 0.58)), tones.1.opacity(0)],
+                               center: UnitPoint(x: (expanded ? 0.61 : 0.54) + sweep, y: 0.49 - drift),
+                               startRadius: 2, endRadius: expanded ? 152 : 89)
+                RadialGradient(colors: [tones.0.opacity(strength), tones.0.opacity(0)],
+                               center: UnitPoint(x: (expanded ? 0.31 : 0.50) + sweep * 0.5, y: 0.50 + drift),
+                               startRadius: 3, endRadius: expanded ? 124 : 72)
+            }
         }
     }
 
@@ -468,7 +485,7 @@ struct WeatherView: View {
         let peak = max(2, items.compactMap(\.amountMm).max() ?? 0)
         return HStack(alignment: .top, spacing: 13) {
             VStack(alignment: .leading, spacing: 6) {
-                appearance.styledText("未来 1 小时降水", size: 15, weight: .semibold)
+                appearance.styledText("未来 1 小时降水", size: 15, weight: .medium)
                 appearance.styledText(series?.precisionNote ?? "短时预报", size: 10).foregroundStyle(.secondary)
                     .lineLimit(2)
             }
@@ -540,7 +557,7 @@ struct WeatherView: View {
         let low = entries.map(\.temperature).min() ?? 0
         let span = max(3, (entries.map(\.temperature).max() ?? 0) - low)
         return VStack(alignment: .leading, spacing: 5) {
-            Text("未来 24 小时").font(.system(size: 16, weight: .semibold))
+            Text("未来 24 小时").font(.system(size: 16, weight: .medium))
             Canvas { context, size in
                 guard !entries.isEmpty else { return }
                 let column = size.width / CGFloat(entries.count)
@@ -571,7 +588,7 @@ struct WeatherView: View {
             HStack(spacing: 0) {
                 ForEach(Array(entries.enumerated()), id: \.offset) { _, hour in
                     VStack(spacing: 3) {
-                        WeatherIcon(code: hour.code, day: hour.isDay, size: 26)
+                        WeatherIcon(code: hour.code, day: hour.isDay, size: 26, centersArtwork: true)
                         Text(hour.time.count >= 16 ? String(hour.time.dropFirst(11).prefix(5)) : hour.time)
                             .font(.system(size: 11)).foregroundStyle(.secondary)
                         appearance.styledText(degrees(hour.temperature), size: 13)
@@ -587,7 +604,7 @@ struct WeatherView: View {
         let items = Array(weather.days.prefix(moreDays ? weather.days.count : 4))
         return VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Text("\(weather.days.count) 天天气预报").font(.system(size: 16, weight: .semibold))
+                Text("\(weather.days.count) 天天气预报").font(.system(size: 16, weight: .medium))
                 Spacer()
                 if weather.days.count > 4 {
                     Button(moreDays ? "收起" : "展开") { moreDays.toggle() }
@@ -601,7 +618,7 @@ struct WeatherView: View {
                         Text(label.weekday).font(.system(size: 14))
                         Text(label.date).font(.system(size: 11)).foregroundStyle(.secondary)
                     }.frame(width: 112, alignment: .leading)
-                    WeatherIcon(code: day.code, size: 24).frame(width: 32)
+                    WeatherIcon(code: day.code, size: 24, centersArtwork: true).frame(width: 32)
                     appearance.styledText(degrees(day.min), size: 14).foregroundStyle(.secondary).frame(width: 58, alignment: .trailing)
                     GeometryReader { proxy in
                         let low = (day.min - minTemp) / span
@@ -662,7 +679,7 @@ struct WeatherView: View {
                 Text(title).foregroundStyle(.secondary)
             }.font(.system(size: 10)).lineLimit(1).minimumScaleFactor(0.75).frame(height: 20)
             HStack(alignment: .firstTextBaseline, spacing: 3) {
-                appearance.styledText(value, size: 16, weight: .medium)
+                appearance.styledText(value, size: 16)
                 if let note { appearance.styledText(note, size: 10).foregroundStyle(.secondary) }
             }.lineLimit(1).minimumScaleFactor(0.74).frame(height: 28)
         }.frame(maxWidth: .infinity)
