@@ -17,7 +17,7 @@ struct FlyoutChrome: ViewModifier {
 
 enum MenuBarCapsuleShape {
     static func outline(height: CGFloat) -> RoundedRectangle {
-        RoundedRectangle(cornerRadius: height * 0.43)
+        RoundedRectangle(cornerRadius: height * 0.47)
     }
 
     static func movingOutline(in bounds: CGRect, progress: CGFloat, gap: CGFloat) -> Path {
@@ -109,7 +109,7 @@ struct WeatherCapsule: View {
                     let color = WeatherLight.colors(code: weather.code, day: weather.isDay).0
                     let iconCenter = (showsPrecipitation ? 8 : 4) + mainSize / 2
                     let radius = width * 0.69 - iconCenter
-                    let strength = scheme == .dark ? 0.30 : 0.36
+                    let strength = scheme == .dark ? 0.40 : 0.46
                     let phase = context.date.timeIntervalSinceReferenceDate
                     let drift = moving ? sin(phase * 2 * .pi / 17) * 0.05 : 0
                     RadialGradient(colors: [color.opacity(strength), color.opacity(strength * 0.57), color.opacity(0)],

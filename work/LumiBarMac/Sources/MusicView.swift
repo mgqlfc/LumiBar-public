@@ -25,7 +25,7 @@ struct MusicView: View {
                     }.frame(width: 18, height: 13)
                 }
                 .frame(width: Self.entryWidth, height: height)
-                .background(model.colors[0].opacity(colorScheme == .dark ? 0.24 : 0.17))
+                .background(model.colors[0].opacity(colorScheme == .dark ? 0.32 : 0.26))
                 .modifier(MenuBarCapsuleChrome(height: height))
             case .expanded:
                 if model.mode == .lyrics { lyricsPanel(track) }
