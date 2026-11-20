@@ -2,7 +2,10 @@ import SwiftUI
 
 struct MusicView: View {
     static let entryWidth: CGFloat = 50
-    enum Surface { case entry(CGFloat, [Int]), expanded }
+    enum Surface {
+        case entry(height: CGFloat, bands: [Int], lightTime: TimeInterval?)
+        case expanded
+    }
     let model: MusicModel
     let appearance: AppearanceModel
     let surface: Surface
@@ -13,19 +16,25 @@ struct MusicView: View {
     var body: some View {
         if let track = model.track {
             switch surface {
-            case .entry(let height, let bands):
-                HStack(spacing: 4) {
-                    cover(size: min(21, height - 4))
-                    HStack(alignment: .center, spacing: 1.6) {
-                        ForEach(bands.indices, id: \.self) { index in
-                            Capsule()
-                                .fill(Color.primary.opacity(bands[index] == 0 ? 0.32 : 0.78))
-                                .frame(width: 1.8, height: 2 + CGFloat(bands[index]))
+            case .entry(let height, let bands, let lightTime):
+                HStack(spacing: 2) {
+                    cover(size: min(21, height - 4), compact: true)
+                    Canvas { context, size in
+                        let barWidth: CGFloat = 2
+                        let step: CGFloat = 3.5
+                        let span = barWidth + CGFloat(max(0, bands.count - 1)) * step
+                        let inset = (size.width - span) / 2
+                        for (index, band) in bands.enumerated() {
+                            let height = 2 + CGFloat(band)
+                            let rect = CGRect(x: inset + CGFloat(index) * step, y: (size.height - height) / 2,
+                                              width: barWidth, height: height)
+                            context.fill(Path(roundedRect: rect, cornerRadius: barWidth / 2),
+                                         with: .color(.primary.opacity(band == 0 ? 0.32 : 0.78)))
                         }
-                    }.frame(width: 18, height: 13)
+                    }.frame(width: 17, height: 15)
                 }
                 .frame(width: Self.entryWidth, height: height)
-                .background(model.colors[0].opacity(colorScheme == .dark ? 0.32 : 0.26))
+                .background { capsuleCoverLight(at: lightTime) }
                 .modifier(MenuBarCapsuleChrome(height: height))
             case .expanded:
                 if model.mode == .lyrics { lyricsPanel(track) }
@@ -104,7 +113,7 @@ struct MusicView: View {
         .padding(.horizontal, 22).padding(.top, 14).padding(.bottom, 16)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background {
-            albumLight(shape, opacity: colorScheme == .dark ? 0.75 : 0.58)
+            albumLight(shape, opacity: colorScheme == .dark ? 0.75 : 0.58, mist: true)
         }
         .modifier(FlyoutChrome(appearance: appearance))
     }
@@ -116,7 +125,28 @@ struct MusicView: View {
         return min(392, max(312, step * rows + 120)) + step * 2
     }
 
-    private func albumLight<S: Shape>(_ shape: S, opacity: Double) -> some View {
+    @ViewBuilder
+    private func capsuleCoverLight(at time: TimeInterval?) -> some View {
+        if appearance.coverTint {
+            let strength = appearance.coverBlend / 0.55
+            let light = colorScheme == .light
+            let colors = model.colors.map { softenCoverLight($0, saturation: appearance.coverSaturation, light: light) }
+            let phase = (time ?? 0) * 2 * .pi / 6.5
+            let sweep = sin(phase)
+            let drift = time == nil ? 0 : cos(phase)
+            ZStack {
+                colors[0].opacity(strength * (light ? 0.26 : 0.32))
+                RadialGradient(colors: [colors[0].opacity(strength * 0.76), colors[0].opacity(0)],
+                               center: UnitPoint(x: 0.37 + sweep * 0.28, y: 0.67 + drift * 0.16),
+                               startRadius: 2, endRadius: 32)
+                RadialGradient(colors: [colors[1].opacity(strength * 0.70), colors[1].opacity(0)],
+                               center: UnitPoint(x: 0.72 - sweep * 0.30, y: 0.33 - drift * 0.14),
+                               startRadius: 0, endRadius: 28)
+            }
+        }
+    }
+
+    private func albumLight<S: Shape>(_ shape: S, opacity: Double, mist: Bool = false) -> some View {
         let moving = appearance.animation && !reduceMotion && model.track?.playing == true
         let strength = opacity * appearance.coverBlend / 0.55
         let colors = model.colors.map { softenCoverLight($0, saturation: appearance.coverSaturation, light: colorScheme == .light) }
@@ -135,10 +165,38 @@ struct MusicView: View {
                     let secondary = RadialGradient(colors: [colors[1].opacity(strength * 0.73), .clear],
                                                    center: UnitPoint(x: 0.91 - dx, y: (capsule ? 0.63 : 0.87) - dy),
                                                    startRadius: 0, endRadius: max(width * 0.65, height * 0.38))
-                    shape.fill(primary).overlay { shape.fill(secondary) }
+                    shape.fill(primary)
+                        .overlay { shape.fill(secondary) }
+                        .overlay {
+                            if mist {
+                                lyricMist(size: geometry.size, colors: colors, strength: strength, time: moving ? time : 0)
+                                    .clipShape(shape)
+                            }
+                        }
                 }
             }
         }.allowsHitTesting(false)
+    }
+
+    private func lyricMist(size: CGSize, colors: [Color], strength: Double, time: TimeInterval) -> some View {
+        let broad = time * 2 * .pi / 12
+        let slow = time * 2 * .pi / 17
+        return ZStack {
+            mistLayer(colors[0], opacity: strength * 0.37, size: size,
+                      center: UnitPoint(x: 0.22 + sin(broad) * 0.29, y: 0.73 + cos(slow) * 0.06), angle: -12)
+            mistLayer(colors[1], opacity: strength * 0.31, size: size,
+                      center: UnitPoint(x: 0.74 + sin(slow) * 0.23, y: 0.88 + sin(broad) * 0.05), angle: 9)
+        }
+    }
+
+    private func mistLayer(_ color: Color, opacity: Double, size: CGSize, center: UnitPoint, angle: Double) -> some View {
+        let radius = size.width / 2
+        return RadialGradient(colors: [color.opacity(opacity), color.opacity(opacity * 0.43), color.opacity(0)],
+                              center: .center, startRadius: 0, endRadius: radius)
+            .frame(width: radius * 2, height: radius * 2)
+            .scaleEffect(x: 1.46, y: 0.39)
+            .rotationEffect(.degrees(angle))
+            .position(x: size.width * center.x, y: size.height * center.y)
     }
 
     private func trackNames(_ track: Track, expanded: Bool) -> some View {
@@ -174,7 +232,7 @@ struct MusicView: View {
         .disabled(model.lyrics.isEmpty)
     }
 
-    private func cover(size: CGFloat) -> some View {
+    private func cover(size: CGFloat, compact: Bool = false) -> some View {
         Group {
             if let artwork = model.artwork {
                 Image(nsImage: artwork).resizable().scaledToFill()
@@ -186,7 +244,7 @@ struct MusicView: View {
                         Image(systemName: "music.note").font(.system(size: size * 0.46, weight: .semibold))
                     }
             }
-        }.frame(width: size, height: size).clipShape(RoundedRectangle(cornerRadius: size * 0.19))
+        }.frame(width: size, height: size).clipShape(RoundedRectangle(cornerRadius: compact ? 8 : size * 0.19))
             .accessibilityHidden(true)
     }
 

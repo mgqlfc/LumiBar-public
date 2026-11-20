@@ -778,7 +778,9 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
             return
         }
         let now = Date.now
-        guard force || now.timeIntervalSince(lastMusicImageAt) > 0.09 else { return }
+        let movingTint = appearance.coverTint && motion && music.artwork != nil
+        let refreshInterval = movingTint ? 1.0 / 30.0 : 0.09
+        guard force || now.timeIntervalSince(lastMusicImageAt) > refreshInterval else { return }
         lastMusicImageAt = now
         let levels = music.previewSpectrum ?? (music.spectrumEnabled
             && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? music.spectrum.levels : [])
@@ -789,12 +791,14 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
             return Int((min(1, max(0, sample)) * 11).rounded())
         }
         let scheme = statusScheme
-        guard force || bands != lastMusicBars || music.artwork !== lastMusicArt || scheme != lastMusicScheme
+        guard force || movingTint || bands != lastMusicBars || music.artwork !== lastMusicArt || scheme != lastMusicScheme
             || musicStatusImage == nil else { return }
         lastMusicBars = bands
         lastMusicArt = music.artwork
         lastMusicScheme = scheme
-        let entry = MusicView(model: music, appearance: appearance, surface: .entry(capsuleHeight, bands)) { }
+        let entry = MusicView(model: music, appearance: appearance,
+                              surface: .entry(height: capsuleHeight, bands: bands,
+                                              lightTime: movingTint ? CACurrentMediaTime() : nil)) { }
         musicStatusImage = statusImage(entry, button: button, size: CGSize(width: MusicView.entryWidth, height: capsuleHeight))
         displayStatusImages()
     }

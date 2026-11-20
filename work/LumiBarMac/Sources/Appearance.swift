@@ -61,16 +61,16 @@ final class AppearanceModel {
         didSet { defaults.set(glassDensity, forKey: "appearance.glassDensity") }
     }
     var coverTint: Bool {
-        didSet { defaults.set(coverTint, forKey: "appearance.coverTint") }
+        didSet { defaults.set(coverTint, forKey: "appearance.coverTint"); onEntryChange?() }
     }
     var animation: Bool {
-        didSet { defaults.set(animation, forKey: "appearance.animation") }
+        didSet { defaults.set(animation, forKey: "appearance.animation"); onEntryChange?() }
     }
     var coverBlend: Double {
-        didSet { defaults.set(coverBlend, forKey: "appearance.coverBlend") }
+        didSet { defaults.set(coverBlend, forKey: "appearance.coverBlend"); onEntryChange?() }
     }
     var coverSaturation: Double {
-        didSet { defaults.set(coverSaturation, forKey: "appearance.coverSaturation") }
+        didSet { defaults.set(coverSaturation, forKey: "appearance.coverSaturation"); onEntryChange?() }
     }
     var accent: AccentPalette { AccentPalette.all.first { $0.id == accentID } ?? AccentPalette.all[7] }
     var windowAppearance: NSAppearance? {
