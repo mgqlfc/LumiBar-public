@@ -71,6 +71,10 @@ internal sealed class Preferences
         FontFamily=FontFamily?.Trim();if(string.IsNullOrEmpty(FontFamily)||FontFamily.Length>128||FontFamily.Any(char.IsControl)||FontFamily.IndexOfAny([':', '/', '\\'])>=0)FontFamily=null;
         static string? CleanFont(string? name){name=name?.Trim();return string.IsNullOrEmpty(name)||name.Length>128||name.Any(char.IsControl)||name.IndexOfAny([':', '/', '\\'])>=0?null:name;}
         ChineseFontFamily=CleanFont(ChineseFontFamily);WesternFontFamily=CleanFont(WesternFontFamily);
+        // Old built-in font choices return to the current defaults for their scripts.
+        if(FontDefaults.IsLegacyChinese(FontFamily))FontFamily=null;
+        if(FontDefaults.IsLegacyChinese(ChineseFontFamily))ChineseFontFamily=null;
+        if(FontDefaults.IsLegacyChinese(WesternFontFamily))WesternFontFamily=null;
         Glow=Clamp(Glow,.08,.55,PreferenceDefaults.Get(nameof(Glow),.28));CoverSaturation=Clamp(CoverSaturation,0,1,PreferenceDefaults.Get(nameof(CoverSaturation),.35));GlassOpacity=Clamp(GlassOpacity,.35,.95,PreferenceDefaults.Get(nameof(GlassOpacity),.62));Sensitivity=Clamp(Sensitivity,.5,2.5,PreferenceDefaults.Get(nameof(Sensitivity),1d));LyricsOffsets=TrackLyricTiming.Normalize(LyricsOffsets);
         Gap=Math.Clamp(Gap,4,24);MusicWidth=Math.Clamp(MusicWidth,180,340);LyricsFontSize=Math.Clamp(LyricsFontSize,18,36);
         if(WeatherRefreshMinutes is not (10 or 20 or 30 or 60))WeatherRefreshMinutes=PreferenceDefaults.Get(nameof(WeatherRefreshMinutes),20);

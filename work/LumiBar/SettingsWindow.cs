@@ -128,7 +128,7 @@ internal sealed partial class SettingsWindow:SurfaceWindow
             AboutItem("后端","C# · .NET 8\nC++ 原生任务栏组件 · 本地命名管道");
             AboutItem("天气与空气","和风天气（云端代理）· Open-Meteo · MET Norway\n空气质量按数据源标注 CN AQI / US AQI · 定位：Windows 系统定位");
             AboutItem("音乐与歌词","Windows 系统媒体会话 · WASAPI 音频频谱\nLRCLIB 同步歌词 · 本地 LRC");
-            AboutItem("默认字体","中文：苹方 · 西文：Geist\n字体随应用提供，也可选用电脑上的字体");break;
+            AboutItem("默认字体",$"中文：{FontDefaults.ChineseDisplayName} · 西文：{FontDefaults.Western}\n字体随应用提供，也可选用电脑上的字体");break;
         default:if(page.StartsWith(PluginPagePrefix,StringComparison.Ordinal))RenderPluginMenuPage(page);break;
         }
         _renderedPreferences=JsonSerializer.Deserialize<Preferences>(JsonSerializer.Serialize(p));
@@ -177,7 +177,7 @@ internal sealed partial class SettingsWindow:SurfaceWindow
     internal void UpdatePreview(){if(IsOpen)_previewMusic?.UpdateSpectrum();}
     private void AddFontPicker(string title,string? selected,Action<string?> update)
     {
-        var defaultName=title=="中文字体"?"苹方":"Geist";
+        var defaultName=title=="中文字体"?FontDefaults.ChineseDisplayName:FontDefaults.Western;
         var group=Ui.Stack(8);group.Children.Add(Ui.Text(title,16));var input=new AutoSuggestBox{PlaceholderText=$"默认：{defaultName}（内置），也可搜索电脑字体",Text=selected??""};Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(input,title);InstalledFont[] fonts=[];
         void Suggest(){var query=input.Text.Trim();var matches=fonts.Where(f=>f.DisplayName.Contains(query,StringComparison.OrdinalIgnoreCase)||f.Family.Contains(query,StringComparison.OrdinalIgnoreCase)).Take(80).Select(f=>f.Family).ToArray();input.ItemsSource=matches;input.IsSuggestionListOpen=query.Length>0&&matches.Length>0;}
         input.Loaded+=async(_,_)=>{fonts=await App.Instance.Fonts.Get();};

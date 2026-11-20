@@ -18,11 +18,16 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <EnableMsixTooling>false</EnableMsixTooling>
     <WindowsAppSdkDeploymentManagerInitialize>false</WindowsAppSdkDeploymentManagerInitialize>
+    <SourceHanSansRevision>6c709ca72d3d7c46ab42ebecc1a26e7d69595a37</SourceHanSansRevision>
+    <SourceHanSansCache>$(MSBuildProjectExtensionsPath)bundled-fonts/$(SourceHanSansRevision)/$(Configuration)/</SourceHanSansCache>
+    <SourceHanSansFile>$(SourceHanSansCache)SourceHanSansSC-VF.ttf</SourceHanSansFile>
+    <SourceHanSansSha256>68F866374D8FF04D2103C5B2907F1CAB2DBEC91AC0FB6AD0B801C6DB0C1FAA80</SourceHanSansSha256>
   </PropertyGroup>
   <ItemGroup>
     <EmbeddedResource Include="Assets/default-settings.json" LogicalName="LumiBar.DefaultSettings.json" />
     <Content Update="Assets/default-settings.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-    <Content Include="Assets/Fonts/**" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="Assets/Fonts/**" Exclude="Assets/Fonts/PingFang*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="$(SourceHanSansFile)" Link="Assets/Fonts/SourceHanSansSC-VF.ttf" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Remove="Assets/weather-atlas.png;Assets/Weather/**" />
     <Content Update="Assets/weather-icons-clean.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Update="Assets/LumiBar.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
@@ -32,6 +37,18 @@
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.4654" />
     <PackageReference Include="NAudio" Version="2.2.1" />
   </ItemGroup>
+  <Target Name="PrepareBundledChineseFont" BeforeTargets="PrepareForBuild;AssignTargetPaths" Condition="'$(DesignTimeBuild)' != 'true'">
+    <GetFileHash Files="$(SourceHanSansFile)" Condition="Exists('$(SourceHanSansFile)')">
+      <Output TaskParameter="Hash" PropertyName="_ExistingSourceHanSansHash" />
+    </GetFileHash>
+    <DownloadFile SourceUrl="https://raw.githubusercontent.com/adobe-fonts/source-han-sans/$(SourceHanSansRevision)/Variable/TTF/SourceHanSansSC-VF.ttf"
+                  DestinationFolder="$(SourceHanSansCache)" DestinationFileName="SourceHanSansSC-VF.ttf"
+                  SkipUnchangedFiles="false" Retries="2" Condition="'$(_ExistingSourceHanSansHash)' != '$(SourceHanSansSha256)'" />
+    <GetFileHash Files="$(SourceHanSansFile)">
+      <Output TaskParameter="Hash" PropertyName="_SourceHanSansHash" />
+    </GetFileHash>
+    <Error Condition="'$(_SourceHanSansHash)' != '$(SourceHanSansSha256)'" Text="The bundled Source Han Sans font failed SHA-256 verification." />
+  </Target>
   <Target Name="IncludeMergedResourceIndex" AfterTargets="ComputeFilesToPublish">
     <Error Condition="!Exists('$(TargetDir)$(AssemblyName).pri')" Text="The merged WinUI resource index is missing." />
     <ItemGroup>

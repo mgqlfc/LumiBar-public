@@ -15,6 +15,7 @@ internal sealed class SystemFontCatalog
     }
     internal async Task<string?> Resolve(string requested,CancellationToken ct=default)
     {
+        if (FontDefaults.IsChinese(requested)) return FontDefaults.Chinese;
         static InstalledFont? Find(InstalledFont[] fonts,string name)=>fonts.FirstOrDefault(x=>x.Family.Equals(name,StringComparison.OrdinalIgnoreCase)||x.Aliases.Contains(name,StringComparer.OrdinalIgnoreCase));
         var font=Find(await Get(ct:ct),requested.Trim());font??=Find(await Get(true,ct),requested.Trim());return font?.Family;
     }
@@ -40,7 +41,7 @@ internal sealed class SystemFontCatalog
                 catch(Exception ex) when(ex is COMException or InvalidDataException){}
                 finally{if(names!=null)Marshal.ReleaseComObject(names);if(family!=null)Marshal.ReleaseComObject(family);}
             }
-            var bundled=new[]{new InstalledFont(FontDefaults.Chinese,"苹方-简（内置）",[FontDefaults.Chinese,".PingFang SC","苹方-简","苹方"]),new InstalledFont(FontDefaults.Western,"Geist（内置）",[FontDefaults.Western])};
+            var bundled=new[]{new InstalledFont(FontDefaults.Chinese,$"{FontDefaults.ChineseDisplayName}（内置）",FontDefaults.ChineseAliases),new InstalledFont(FontDefaults.Western,"Geist（内置）",[FontDefaults.Western])};
             return bundled.Concat(result).DistinctBy(x=>x.Family,StringComparer.OrdinalIgnoreCase).OrderBy(x=>x.DisplayName,StringComparer.CurrentCultureIgnoreCase).ToArray();
         }
         finally{if(collection!=null)Marshal.ReleaseComObject(collection);Marshal.ReleaseComObject(factory);}
