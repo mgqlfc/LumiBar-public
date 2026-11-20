@@ -17,9 +17,9 @@ internal static class Typography
     internal static FontFamily Western => Family(App.Instance?.Prefs.WesternFontFamily,false);
     internal static FontFamily Default => Cached($"{Western.Source}, {Chinese.Source}");
     private static FontFamily Cached(string source){if(!Families.TryGetValue(source,out var font))Families[source]=font=new FontFamily(source);return font;}
-    private static FontFamily Family(string? name,bool chinese,int weight=400,bool italic=false)
+    private static FontFamily Family(string? name,bool chinese,bool italic=false)
     {
-        if((chinese&&string.IsNullOrWhiteSpace(name))||FontDefaults.IsChinese(name))return Cached($"ms-appx:///Assets/Fonts/PingFangSC-{FontDefaults.ChineseFile(weight)}.otf#PingFang SC");
+        if((chinese&&string.IsNullOrWhiteSpace(name))||FontDefaults.IsChinese(name))return Cached($"ms-appx:///Assets/Fonts/{FontDefaults.ChineseAsset}#{FontDefaults.Chinese}");
         if((!chinese&&string.IsNullOrWhiteSpace(name))||FontDefaults.IsWestern(name))return Cached($"ms-appx:///Assets/Fonts/Geist-{(italic?"Italic-":"")}VariableFont_wght.ttf#Geist");
         return Cached(name!);
     }
@@ -58,8 +58,8 @@ internal static class Typography
                 current=chinese;chunk.Append(rune.ToString());
             }
             if(current.HasValue)parts.Add((current.Value,chunk.ToString()));
-            var chineseFamily=Family(App.Instance.Prefs.ChineseFontFamily,true,block.FontWeight.Weight,block.FontStyle==Windows.UI.Text.FontStyle.Italic);
-            var westernFamily=Family(App.Instance.Prefs.WesternFontFamily,false,block.FontWeight.Weight,block.FontStyle==Windows.UI.Text.FontStyle.Italic);
+            var chineseFamily=Family(App.Instance.Prefs.ChineseFontFamily,true,block.FontStyle==Windows.UI.Text.FontStyle.Italic);
+            var westernFamily=Family(App.Instance.Prefs.WesternFontFamily,false,block.FontStyle==Windows.UI.Text.FontStyle.Italic);
             block.FontFamily=parts.Count==1&&parts[0].Chinese?chineseFamily:westernFamily;
             if(parts.Count>1)
             {

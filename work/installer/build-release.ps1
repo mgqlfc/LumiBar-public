@@ -22,14 +22,19 @@ if(-not$NoRestore){
 }
 & dotnet publish (Join-Path $workspace 'work\LumiBar\LumiBar.csproj') -c Release -r win-x64 --self-contained true -p:Platform=x64 -p:DebugType=None -p:DebugSymbols=false -p:NuGetAudit=false -o $payload --no-restore -v:minimal
 if($LASTEXITCODE -ne 0){throw 'Publish failed'}
+foreach($fontAsset in @('SourceHanSansSC-VF.ttf','SourceHanSans-OFL.txt')){
+    if(-not(Test-Path -LiteralPath (Join-Path $payload "Assets\Fonts\$fontAsset") -PathType Leaf)){
+        throw "Publish is missing $fontAsset"
+    }
+}
 if($IncludeAntigravity){
     $frontend=Join-Path $workspace 'work\frontends\antigravity'
     $plugin=Join-Path $payload 'frontends\antigravity'
     & (Join-Path $frontend 'build.ps1') -Mode Publish -Offline:$OfflineFrontend -OutputDirectory (Join-Path $plugin 'dist')
     Copy-Item -LiteralPath (Join-Path $frontend 'plugin.manifest.json') -Destination (Join-Path $plugin 'plugin.manifest.json') -Force
 }
-$forbidden=Get-ChildItem -LiteralPath $payload -Recurse -File | Where-Object { $_.Extension -in '.pdb','.pem','.key','.env','.log','.nupkg' -or $_.Name -in 'settings.json','frontend-endpoint.json','antigravity-plugin.config.json' }
-if($forbidden){throw 'Publish contains development or user data files'}
+$forbidden=Get-ChildItem -LiteralPath $payload -Recurse -File | Where-Object { $_.Name -like 'PingFang*' -or $_.Extension -in '.pdb','.pem','.key','.env','.log','.nupkg' -or $_.Name -in 'settings.json','frontend-endpoint.json','antigravity-plugin.config.json' }
+if($forbidden){throw 'Publish contains retired fonts, development files, or user data'}
 $defines=@("/DAppVersion=$Version","/DPayloadDir=$payload");if($IncludeAntigravity){$defines+='/DIncludeAntigravity=1'}
 & $IsccPath @defines (Join-Path $PSScriptRoot 'LumiBar.iss')
 if($LASTEXITCODE -ne 0){throw 'Installer build failed'}

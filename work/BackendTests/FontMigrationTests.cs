@@ -24,7 +24,10 @@ internal static class FontMigrationTests
             var partialChinese=Load("""{"FontFamily":"Inter","ChineseFontFamily":null}""");
             Check(partialChinese.ChineseFontFamily==null&&partialChinese.WesternFontFamily=="Inter","Explicit Chinese system-font choice survives migration while missing Western font inherits legacy value");
             var partialWestern=Load("""{"FontFamily":"PingFang SC","WesternFontFamily":"Inter"}""");
-            Check(partialWestern.ChineseFontFamily=="PingFang SC"&&partialWestern.WesternFontFamily=="Inter","Migration preserves explicit Western font and only fills missing Chinese font");
+            Check(partialWestern.ChineseFontFamily==null&&partialWestern.WesternFontFamily=="Inter","Old bundled Chinese font returns to the new default while explicit Western font survives");
+            var oldBundled=Load("""{"ChineseFontFamily":"苹方-简","WesternFontFamily":".PingFang SC"}""");
+            Check(oldBundled.ChineseFontFamily==null&&oldBundled.WesternFontFamily==null,"Explicit aliases of the previous bundled font return to the script defaults");
+            Check(FontDefaults.Chinese=="Source Han Sans SC VF"&&FontDefaults.IsChinese("思源黑体"),"The default Chinese family and its localized name resolve to the new bundled font");
             var reset=Load("""{"FontFamily":"Inter","ChineseFontFamily":null,"WesternFontFamily":null}""");
             Check(reset.ChineseFontFamily==null&&reset.WesternFontFamily==null,"Both explicit system-font resets stay null despite retained legacy font");
             var blank=Load("""{"FontFamily":"Inter","ChineseFontFamily":"","WesternFontFamily":" "}""");
