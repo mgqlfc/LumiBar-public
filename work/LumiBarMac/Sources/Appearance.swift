@@ -112,9 +112,11 @@ final class AppearanceModel {
         var content = AttributedString()
         for (part, chinese) in pieces {
             var run = AttributedString(part)
-            let family = chinese ? (chineseFont.isEmpty ? "PingFang SC" : chineseFont)
-                                 : (westernFont.isEmpty ? "Geist" : westernFont)
-            run.font = .custom(family, size: size).weight(weight)
+            if let family = fontFamily(forChinese: chinese) {
+                run.font = .custom(family, size: size).weight(weight)
+            } else {
+                run.font = .system(size: size, weight: weight)
+            }
             content += run
         }
         return Text(content)
@@ -122,12 +124,17 @@ final class AppearanceModel {
 
     func textWidth(_ value: String, size: CGFloat, semibold: Bool = false) -> CGFloat {
         scriptRuns(value).reduce(0) { total, run in
-            let name = run.1 ? (chineseFont.isEmpty ? "PingFang SC" : chineseFont)
-                             : (westernFont.isEmpty ? "Geist" : westernFont)
             let fallback = NSFont.systemFont(ofSize: size, weight: semibold ? .semibold : .regular)
-            let font = NSFontManager.shared.font(withFamily: name, traits: [], weight: semibold ? 8 : 5, size: size) ?? fallback
+            let font = fontFamily(forChinese: run.1).flatMap {
+                NSFontManager.shared.font(withFamily: $0, traits: [], weight: semibold ? 8 : 5, size: size)
+            } ?? fallback
             return total + (run.0 as NSString).size(withAttributes: [.font: font]).width
         }
+    }
+
+    private func fontFamily(forChinese chinese: Bool) -> String? {
+        if chinese { return chineseFont.isEmpty ? nil : chineseFont }
+        return westernFont.isEmpty ? "Geist" : westernFont
     }
 
     private func scriptRuns(_ value: String) -> [(String, Bool)] {
@@ -327,7 +334,7 @@ struct SettingsView: View {
             .padding(8).glassEffect(.regular, in: RoundedRectangle(cornerRadius: 18))
             percentControl("着色浓度", value: $appearance.coverBlend, range: 0.08...0.55)
             percentControl("封面饱和度", value: $appearance.coverSaturation, range: 0...1)
-            FontChoice(title: "中文字体", defaultName: "苹方", family: $appearance.chineseFont)
+            FontChoice(title: "中文字体", defaultName: "系统字体", family: $appearance.chineseFont)
             FontChoice(title: "西文字体", defaultName: "Geist", family: $appearance.westernFont)
         }
         .padding(24)
