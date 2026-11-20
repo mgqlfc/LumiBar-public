@@ -9,6 +9,7 @@ enum WeatherGlyph {
     }()
     private static var atlasCells: [Int: NSImage] = [:]
     private static var fallbackImages: [String: NSImage] = [:]
+    private static var centeredImages: [ObjectIdentifier: NSImage] = [:]
 
     private static func atlasImage(_ code: Int, day: Bool?) -> NSImage? {
         guard let atlas else { return nil }
@@ -55,17 +56,52 @@ enum WeatherGlyph {
         fallbackImages[filename] = image
         return image
     }
+
+    static func centered(_ original: NSImage) -> NSImage {
+        let key = ObjectIdentifier(original)
+        if let image = centeredImages[key] { return image }
+        guard let bitmap = original.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return original }
+        let width = bitmap.width
+        let height = bitmap.height
+        let stride = width * 4
+        guard let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8,
+                                      bytesPerRow: stride, space: CGColorSpaceCreateDeviceRGB(),
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue),
+              let pixels = context.data?.assumingMemoryBound(to: UInt8.self) else { return original }
+        let canvas = CGRect(x: 0, y: 0, width: width, height: height)
+        context.draw(bitmap, in: canvas)
+        var left = width, top = height, right = -1, bottom = -1
+        for y in 0..<height {
+            for x in 0..<width where pixels[y * stride + x * 4 + 3] >= 16 {
+                left = min(left, x)
+                top = min(top, y)
+                right = max(right, x)
+                bottom = max(bottom, y)
+            }
+        }
+        guard right >= left, bottom >= top else { return original }
+        let visible = CGRect(x: left, y: top, width: right - left + 1, height: bottom - top + 1)
+        guard let cropped = context.makeImage()?.cropping(to: visible) else { return original }
+        context.clear(canvas)
+        context.draw(cropped, in: CGRect(x: (canvas.width - visible.width) / 2, y: (canvas.height - visible.height) / 2,
+                                        width: visible.width, height: visible.height))
+        guard let centered = context.makeImage() else { return original }
+        let image = NSImage(cgImage: centered, size: original.size)
+        centeredImages[key] = image
+        return image
+    }
 }
 
 struct WeatherIcon: View {
     let code: Int
     var day: Bool? = nil
     let size: CGFloat
+    var centersArtwork = false
 
     var body: some View {
         Group {
             if let original = WeatherGlyph.image(code, day: day) {
-                Image(nsImage: original).resizable().scaledToFit()
+                Image(nsImage: centersArtwork ? WeatherGlyph.centered(original) : original).resizable().scaledToFit()
             } else {
                 Image(systemName: Weather.appearance(code, day: day).symbol)
                     .symbolRenderingMode(.multicolor)

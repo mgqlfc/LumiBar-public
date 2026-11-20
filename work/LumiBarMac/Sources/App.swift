@@ -244,7 +244,7 @@ final class LumiBarController: NSObject, NSApplicationDelegate {
     private var backgrounded = false
     private var musicScreen: NSScreen? { NSScreen.screens.first }
     private var motion: Bool { appearance.animation && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
-    private let capsuleHeight: CGFloat = 26
+    private let capsuleHeight: CGFloat = 25
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if let reference {

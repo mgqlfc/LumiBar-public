@@ -85,7 +85,7 @@ struct WeatherCapsule: View {
 
     var body: some View {
         HStack(spacing: 3) {
-            WeatherIcon(code: model.weather?.code ?? 2, day: model.weather?.isDay, size: mainSize)
+            WeatherIcon(code: model.weather?.code ?? 2, day: model.weather?.isDay, size: mainSize, centersArtwork: true)
             if let weather = model.weather {
                 appearance.styledText(model.temperature(weather.temperature), size: 15, weight: .semibold)
                     .lineLimit(1).minimumScaleFactor(0.60)
@@ -94,7 +94,7 @@ struct WeatherCapsule: View {
             if showsPrecipitation, model.weather != nil { Spacer(minLength: 1) }
             if let rainText {
                 HStack(spacing: 2) {
-                    WeatherIcon(code: 61, day: true, size: min(14, height - 5))
+                    WeatherIcon(code: 61, day: true, size: min(14, height - 5), centersArtwork: true)
                     appearance.styledText(rainText, size: 11).opacity(0.85)
                         .lineLimit(1).minimumScaleFactor(0.75)
                 }
