@@ -6,6 +6,24 @@ internal static class ExtensionTests
     internal static async Task<List<string>> Run()
     {
         var results=new List<string>();void Check(bool value,string name)=>results.Add($"{(value?"PASS":"FAIL")} {name}");
+        var atlas=new byte[16*16*4];
+        void Alpha(int x,int y,byte value)=>atlas[(y*16+x)*4+3]=value;
+        Alpha(0,2,255);Alpha(1,3,255);Alpha(7,0,16);Alpha(3,0,15);
+        var artwork=WeatherArtworkGeometry.Measure(atlas,16,16);
+        Check(artwork[0]==new WeatherArtworkBounds(0,2,2,4),"Weather artwork bounds ignore almost transparent fringe pixels");
+        Check(artwork[0].CenterOffset(4,4,24)==(6d,-6d),"Weather artwork moves its visible centre without changing its size");
+        Check(artwork[1].CenterOffset(4,4,24)==(-9d,9d),"Atlas cells measure independently and include the alpha threshold boundary");
+        Check(artwork[15].CenterOffset(4,4,22)==(0d,0d),"Empty weather cells keep a finite neutral offset");
+        Check(artwork[0].CenterOffset(4,4,68)==(17d,-17d)&&artwork[0].CenterOffset(4,4,22)==(5.5d,-5.5d),"Artwork centring scales consistently for detail and Lite capsule sizes");
+        var oddAtlas=new byte[18*18*4];oddAtlas[4*4+3]=255;var oddArtwork=WeatherArtworkGeometry.Measure(oddAtlas,18,18);
+        Check(oddArtwork[0].CenterOffset(4.5,4.5,18)==(-8d,7d)&&oddArtwork[1].CenterOffset(4.5,4.5,18)==(8d,7d),"Fractional atlas cells retain both halves of boundary pixels without rounding away artwork");
+        try{WeatherArtworkGeometry.Measure(new byte[3],16,16);Check(false,"Incomplete weather atlases fail before reading pixels");}catch(ArgumentException){Check(true,"Incomplete weather atlases fail before reading pixels");}
+        Check(WeatherHeaderText.Status("上次更新：11:50")=="上次更新 11:50"&&WeatherHeaderText.Status("上次更新: 11:50")=="上次更新 11:50"&&WeatherHeaderText.Status("上次更新 11:50")=="上次更新 11:50","Weather header separates the update label and time with one space");
+        Check(WeatherHeaderText.Status("正在更新天气…")=="正在更新天气…"&&WeatherHeaderText.Status("更新失败 · 保留 11-21 11:50 的天气").StartsWith("更新失败"),"Compact weather metadata preserves loading and failure messages");
+        Check(LightFieldGeometry.Overscan(12,-7)==15&&LightFieldGeometry.Overscan(-4,2)==8,"Larger weather motion gets sufficient overscan while capsule padding is preserved");
+        Check(LightFieldGeometry.EdgeOpacity(-2,100,334,244,24)==0&&LightFieldGeometry.EdgeOpacity(0,100,334,244,24)==0&&LightFieldGeometry.EdgeOpacity(334,100,334,244,24)==0,"Expanded weather light is transparent at and outside its field edges");
+        Check(LightFieldGeometry.EdgeOpacity(12,122,334,244,24)==.5&&LightFieldGeometry.EdgeOpacity(167,122,334,244,24)==1,"Weather edge feather reaches a smooth midpoint and preserves the bright interior");
+        Check(LightFieldGeometry.EdgeOpacity(0,0,104,34,0)==1,"Capsule light keeps full edge coverage when weather-panel feathering is enabled elsewhere");
         using var solar=JsonDocument.Parse("""{"sunrise":["2026-11-14T06:42"],"sunset":["2026-11-14T16:57"],"is_day":0}""");
         Check(WeatherClock.DailyTime(solar.RootElement,"sunrise")==new DateTime(2026,11,14,6,42,0),"Sunrise retains city wall-clock time");
         Check(WeatherClock.DailyTime(solar.RootElement,"sunset")?.Kind==DateTimeKind.Unspecified,"Solar time is not silently converted to machine timezone");

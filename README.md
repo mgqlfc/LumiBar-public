@@ -2,7 +2,7 @@
 
 Ma Guanqun with Codex
 
-Windows 11 任务栏天气与音乐双胶囊。当前版本 0.7.56，使用 C# / .NET 8 / WinUI 3；原生 C++ 组件处理任务栏空间预留和窗口层级。自带天气详情、系统媒体控制、频谱、同步歌词和可替换前端接口。Mac 版目标 macOS 27：音乐围绕刘海展开，天气放在右侧菜单栏，详见 [Mac 移植交接](MACOS_HANDOFF.md)。
+Windows 11 任务栏天气与音乐双胶囊。当前版本 0.7.58，使用 C# / .NET 8 / WinUI 3；原生 C++ 组件处理任务栏空间预留和窗口层级。自带天气详情、系统媒体控制、频谱、同步歌词和可替换前端接口。Mac 版目标 macOS 27：音乐围绕刘海展开，天气放在右侧菜单栏，详见 [Mac 移植交接](MACOS_HANDOFF.md)。
 
 Mac 视觉对齐先看 [还原包](outputs/Mac前端还原包/README.md)：Mac 入口、Windows 内置浮窗风格，天气胶囊也尽量还原；附 14 张真实参考、尺寸/字体/动效参数与 `codex/macos-port` 分支差异清单。
 
@@ -38,18 +38,20 @@ dotnet build .\work\LumiBar\LumiBar.csproj -c Release -p:Platform=x64
 dotnet run --project work/BackendTests/BackendTests.csproj -c Release
 ```
 
-0.7.56 后端已在开发机通过 350 项检查。Shell 浮层导致测量中断时沿用同一任务栏的已验证边界；原生空间预留报错时仍保留窗口层级跟随，避免开始菜单和搜索盖住胶囊。预警徽章只显示事件名称。macOS 原生客户端处于概念与移植准备阶段，Windows 10 任务栏适配待完成。
+0.7.58 后端已在开发机通过 365 项检查。本版同步紧凑城市栏、天气图案居中与详情局部光效，来源和时间靠右显示；详见 [验证记录](work/installer/RELEASE-QA-0.7.58.md)。保留 0.7.56 的任务栏边界和层级修正。macOS 原生客户端处于概念与移植准备阶段，Windows 10 任务栏适配待完成。
 
 Antigravity 前端新增 Win2D 1.3.2、锁文件与离线构建脚本。最新配置版本为 v7，歌词浮窗默认 512×384；历史 0.7.49 文档记录的是 v6 的 420×384，当前默认值以 `Sdk/PluginConfig.cs` 和 `antigravity-plugin.defaults.json` 为准。
 
 ## 安装包
 
-GitHub 页面打开 **Actions → Build Release → Run workflow**，分支选 `main`，版本留空会读取工程版本；可勾选 `include_antigravity`。运行成功后，在该次运行底部的 **Artifacts** 下载 `LumiBar-版本-windows-x64`，解压即可得到 EXE 安装包和 SHA-256 校验文件。该流程生成 Windows 安装包，使用 GitHub 的 Windows 构建机，Mac 上也能从网页触发。产物保留 14 天。
+公开安装包在 [Releases](https://github.com/mgqlfc/LumiBar-public/releases) 下载，中文默认思源黑体、西文默认 Geist。当前仅提供 Windows 11 x64 EXE 安装版。
+
+自行构建时，GitHub 页面打开 **Actions → Build Release → Run workflow**，分支选 `main`，版本留空会读取工程版本；可勾选 `include_antigravity`。运行成功后，在该次运行底部的 **Artifacts** 下载 `LumiBar-版本-windows-x64`，解压即可得到 EXE 安装包和 SHA-256 校验文件。该流程生成 Windows 安装包，使用 GitHub 的 Windows 构建机，Mac 上也能从网页触发。产物保留 14 天。
 
 本机入口 `work/installer/build-release.ps1` 发布自包含程序并调用 Inno Setup。编译器从 `-IsccPath`、`LUMIBAR_ISCC`、本机工具目录或已安装的 Inno Setup 查找。
 
 ```powershell
-& .\work\installer\build-release.ps1 -Version '0.7.56'
+& .\work\installer\build-release.ps1 -Version '0.7.58'
 ```
 
 已存在同名发布目录时脚本会停止，使用新版本或新的发布目录构建。安装包和中间产物保留在本机，不纳入 Git。
@@ -64,10 +66,10 @@ GitHub 页面打开 **Actions → Build Release → Run workflow**，分支选 `
 
 ## 两台电脑协作
 
-在 MacBook 上克隆同一私有仓库，可查看源码、设计与协议，并开展 Mac 客户端开发。当前 WinUI 程序仍在 Windows 上构建和运行。
+在 MacBook 上克隆同一公开仓库，可查看源码、设计与协议，并开展 Mac 客户端开发。当前 WinUI 程序仍在 Windows 上构建和运行。
 
 ```sh
-git clone https://github.com/mgqlfc/LumiBar.git
+git clone https://github.com/mgqlfc/LumiBar-public.git
 ```
 
 克隆后先打开 [MACOS_HANDOFF.md](MACOS_HANDOFF.md)，概念图在 `outputs/concepts/LumiBar-macOS27-concept-v1.png`。

@@ -1,4 +1,4 @@
-param([string]$Version='0.7.56',[switch]$IncludeAntigravity,[switch]$OfflineFrontend,[switch]$NoRestore,[string]$IsccPath)
+param([string]$Version='0.7.58',[switch]$IncludeAntigravity,[switch]$OfflineFrontend,[switch]$NoRestore,[string]$IsccPath)
 $ErrorActionPreference='Stop'
 $workspace=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 $suffix=if($IncludeAntigravity){'-with-antigravity'}else{''}

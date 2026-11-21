@@ -8,14 +8,14 @@ using Windows.Foundation;
 namespace LumiBar;
 internal sealed class WeatherWindow : SurfaceWindow
 {
-    private readonly Grid _weatherLight=new(){Width=300,Height=220,HorizontalAlignment=HorizontalAlignment.Left,VerticalAlignment=VerticalAlignment.Top,IsHitTestVisible=false};
+    private readonly Grid _weatherLight=new(){Width=334,Height=244,HorizontalAlignment=HorizontalAlignment.Left,VerticalAlignment=VerticalAlignment.Top,IsHitTestVisible=false};
     private readonly WeatherAtmosphere _atmosphere;private FrameworkElement? _currentWeather;private AnimatedReveal? _dailyReveal;
     private readonly AnimatedReveal _searchReveal;private bool _renderPending,_rendering;private TextBlock? _status;private Button? _refresh;
     private readonly StackPanel _content=Ui.Stack(8);private readonly StackPanel _searchArea=Ui.Stack(10);private readonly TextBox _search=new(){PlaceholderText="搜索城市，例如：天津 / Tianjin"};private readonly StackPanel _results=Ui.Stack(6);private readonly TextBlock _searchStatus=Ui.Text("",12,.7);private int _searchVersion;
     internal WeatherWindow():base("LumiBar · 天气")
     {
         // Atmospheric colour belongs to the glass surface, never to icon pixels.
-        LightHost.Children.Add(_weatherLight);_atmosphere=new WeatherAtmosphere(_weatherLight);
+        LightHost.Children.Add(_weatherLight);_atmosphere=new WeatherAtmosphere(_weatherLight,expanded:true);
         SurfaceVisibilityChanged+=open=>_atmosphere.SetActive(open);
         _searchReveal=new AnimatedReveal(_searchArea);_searchReveal.LayoutFrame+=ResizeContent;
         var scroll=new ScrollViewer{Content=_content,Padding=new Thickness(22,16,22,16),HorizontalScrollBarVisibility=ScrollBarVisibility.Disabled,VerticalScrollBarVisibility=ScrollBarVisibility.Auto};scroll.BringIntoViewOnFocusChange=false;scroll.ViewChanged+=(_,_)=>PositionLight();Body.Children.Add(scroll);
@@ -32,7 +32,7 @@ internal sealed class WeatherWindow : SurfaceWindow
     internal void UpdateStatus()
     {
         if(_status==null){Render();return;}
-        _status.Text=App.Instance.WeatherStatus;
+        _status.Text=WeatherHeaderText.Status(App.Instance.WeatherStatus);
         if(_refresh!=null)_refresh.IsEnabled=App.Instance.Prefs.City!=null&&!App.Instance.WeatherStatus.Contains("正在更新");
     }
     private void RenderCore()
@@ -47,26 +47,29 @@ internal sealed class WeatherWindow : SurfaceWindow
     private void BuildContent(bool expanded)
     {
         var app=App.Instance;var f=app.Forecast;_currentWeather=null;_dailyReveal=null;_weatherLight.Visibility=Visibility.Collapsed;_content.Children.Clear();
-        var header=new Grid{ColumnSpacing=12};header.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});header.ColumnDefinitions.Add(new(){Width=GridLength.Auto});
-        var titles=new Grid{ColumnSpacing=10,VerticalAlignment=VerticalAlignment.Center};titles.ColumnDefinitions.Add(new(){Width=GridLength.Auto});titles.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});
-        var title=Ui.Text(app.Prefs.City?.Name??"你的天气",24);title.FontWeight=Microsoft.UI.Text.FontWeights.SemiBold;title.MaxWidth=150;title.TextWrapping=TextWrapping.NoWrap;title.TextTrimming=TextTrimming.CharacterEllipsis;titles.Children.Add(title);
-        var metadata=new Grid{ColumnSpacing=8,VerticalAlignment=VerticalAlignment.Bottom,Margin=new Thickness(0,0,0,3)};metadata.ColumnDefinitions.Add(new(){Width=GridLength.Auto});metadata.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});
-        if(f!=null){var sources=new Button{Content=Ui.Text(f.Source,11,.7),Background=Ui.Brush(Colors.Transparent),BorderThickness=new Thickness(0),Padding=new Thickness(0),MinHeight=18,VerticalAlignment=VerticalAlignment.Center};ToolTipService.SetToolTip(sources,"数据来源");Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(sources,"数据来源 · "+f.Source);Ui.SoftAccentHover(sources);
-            sources.Click+=(_,_)=>{var details=Ui.Stack(8);details.Children.Add(Ui.Text(f.Source,16));foreach(var note in (f.Attributions??[]).Concat(f.ProviderNote??[]))details.Children.Add(Ui.Text(note,12,.8));new Flyout{Content=new ScrollViewer{Content=details,Width=300,MaxHeight=260,HorizontalScrollBarVisibility=ScrollBarVisibility.Disabled}}.ShowAt(sources);};metadata.Children.Add(sources);}
-        _status=Ui.Text(app.WeatherStatus,11,.7);_status.TextWrapping=TextWrapping.NoWrap;_status.TextTrimming=TextTrimming.CharacterEllipsis;_status.VerticalAlignment=VerticalAlignment.Center;ToolTipService.SetToolTip(_status,app.WeatherStatus);Grid.SetColumn(_status,1);metadata.Children.Add(_status);Grid.SetColumn(metadata,1);titles.Children.Add(metadata);header.Children.Add(titles);
+        var header=Ui.Stack(5);
+        var top=new Grid{ColumnSpacing=7};top.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});top.ColumnDefinitions.Add(new(){Width=GridLength.Auto});top.Children.Add(CitySwitcher());
         var tools=Ui.Row(2);
         var refresh=_refresh=Ui.IconButton("\uE72C","更新天气",async(sender,_)=>{if(sender is Button b)b.IsEnabled=false;await app.RefreshWeather();});if(refresh.Content is FontIcon refreshIcon)refreshIcon.FontSize=15;refresh.IsEnabled=app.Prefs.City!=null&&!app.WeatherStatus.Contains("正在更新");tools.Children.Add(refresh);
-        tools.Children.Add(Ui.More(("选择城市",(_,_)=>ToggleSearch()),(KeepOpen?"取消固定":"固定浮窗",(_,_)=>{KeepOpen=!KeepOpen;Render();}),("设置",(_,_)=>app.OpenSettings()),("关闭",(_,_)=>HideSurface())));Grid.SetColumn(tools,1);header.Children.Add(tools);_content.Children.Add(header);
-        _content.Children.Add(CitySwitcher());
+        tools.Children.Add(Ui.More(("选择城市",(_,_)=>ToggleSearch()),(KeepOpen?"取消固定":"固定浮窗",(_,_)=>{KeepOpen=!KeepOpen;Render();}),("设置",(_,_)=>app.OpenSettings()),("关闭",(_,_)=>HideSurface())));
+        foreach(var button in tools.Children.OfType<Button>()){button.Width=button.Height=28;button.MinWidth=button.MinHeight=0;}
+        Grid.SetColumn(tools,1);top.Children.Add(tools);header.Children.Add(top);
+        var metadata=new Grid{ColumnSpacing=0};metadata.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});for(var i=0;i<3;i++)metadata.ColumnDefinitions.Add(new(){Width=GridLength.Auto});
+        if(f!=null){var sourceLabel=Ui.Text(f.Source,11,.7);sourceLabel.MaxWidth=140;sourceLabel.TextWrapping=TextWrapping.NoWrap;sourceLabel.TextTrimming=TextTrimming.CharacterEllipsis;
+            var sources=new Button{Content=sourceLabel,Background=Ui.Brush(Colors.Transparent),BorderThickness=new Thickness(0),Padding=new Thickness(0),MinHeight=18,VerticalAlignment=VerticalAlignment.Center};ToolTipService.SetToolTip(sources,"数据来源 · "+f.Source);Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(sources,"数据来源 · "+f.Source);Ui.SoftAccentHover(sources);
+            sources.Click+=(_,_)=>{var details=Ui.Stack(8);details.Children.Add(Ui.Text(f.Source,16));foreach(var note in (f.Attributions??[]).Concat(f.ProviderNote??[]))details.Children.Add(Ui.Text(note,12,.8));new Flyout{Content=new ScrollViewer{Content=details,Width=300,MaxHeight=260,HorizontalScrollBarVisibility=ScrollBarVisibility.Disabled}}.ShowAt(sources);};Grid.SetColumn(sources,1);metadata.Children.Add(sources);
+            var separator=Ui.Text("·",11,.7);separator.VerticalAlignment=VerticalAlignment.Center;Grid.SetColumn(separator,2);metadata.Children.Add(separator);}
+        _status=Ui.Text(WeatherHeaderText.Status(app.WeatherStatus),11,.7);_status.MaxWidth=288;_status.TextWrapping=TextWrapping.NoWrap;_status.TextTrimming=TextTrimming.CharacterEllipsis;_status.VerticalAlignment=VerticalAlignment.Center;ToolTipService.SetToolTip(_status,app.WeatherStatus);Grid.SetColumn(_status,3);metadata.Children.Add(_status);header.Children.Add(metadata);_content.Children.Add(header);
         if(!string.IsNullOrEmpty(app.LocationStatus))_content.Children.Add(Ui.Text(app.LocationStatus,12,.75));
         _content.Children.Add(_searchReveal);if(app.Prefs.City==null)_searchReveal.SetExpanded(true,false);
         if(app.Prefs.City==null){var welcome=Ui.Stack(14);welcome.Margin=new Thickness(8,44,8,44);var icon=Ui.Icon("\uE706",58);icon.Foreground=Ui.Brush(ColorHelper.FromArgb(255,224,169,43));welcome.Children.Add(icon);welcome.Children.Add(Ui.Text("抬眼看天气",28));welcome.Children.Add(Ui.Text("添加常用城市，温度就会留在任务栏。\n点开后查看逐时预报、风速与空气质量。",15,.7));_content.Children.Add(welcome);return;}
         if(f==null){_content.Children.Add(new ProgressRing{IsActive=app.WeatherStatus.Contains("正在更新"),Width=36,Height=36,Margin=new Thickness(0,36,0,36)});return;}
         if((DateTime.Now-f.Updated).TotalHours>2)_content.Children.Add(new InfoBar{IsOpen=true,Severity=InfoBarSeverity.Warning,Title="天气数据已过期",Message="当前显示上次保存的天气，请刷新。",IsClosable=false});
-        var current=new Grid{ColumnSpacing=12};
+        // The compact city header no longer needs the previous double section gap.
+        var current=new Grid{ColumnSpacing=12,Margin=new Thickness(0,-8,0,0)};
         current.ColumnDefinitions.Add(new(){Width=new GridLength(68)});current.ColumnDefinitions.Add(new(){Width=GridLength.Auto});current.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});
         _currentWeather=current;current.Loaded+=(_,_)=>PositionLight();current.SizeChanged+=(_,_)=>PositionLight();_atmosphere.Update(f.Code,f.IsDay,app.Prefs.Animations);
-        current.Children.Add(new WeatherGlyph(f.Code,f.IsDay,68){VerticalAlignment=VerticalAlignment.Center});
+        current.Children.Add(new WeatherGlyph(f.Code,f.IsDay,68){VerticalAlignment=VerticalAlignment.Center,RenderTransform=new TranslateTransform{Y=-3}});
         var temperature=Ui.Text(app.Temperature(f.Temperature)+(app.Prefs.Fahrenheit?"F":"C"),52);temperature.TextWrapping=TextWrapping.NoWrap;Grid.SetColumn(temperature,1);current.Children.Add(temperature);
         var info=Ui.Stack(6);info.VerticalAlignment=VerticalAlignment.Center;
         var condition=new Grid{ColumnSpacing=0,HorizontalAlignment=HorizontalAlignment.Left};condition.ColumnDefinitions.Add(new(){Width=GridLength.Auto});var conditionName=Ui.Text(f.ConditionText??WeatherNames.Describe(f.Code),18);conditionName.Margin=new Thickness(0,0,5,0);condition.Children.Add(conditionName);
@@ -121,7 +124,7 @@ internal sealed class WeatherWindow : SurfaceWindow
         {
             var selected=!prefs.AutoLocateCity&&SavedCities.Same(city,prefs.City);var content=Ui.Row(5);
             var name=Ui.Text(city.Name,12);name.TextWrapping=TextWrapping.NoWrap;content.Children.Add(name);
-            var button=new Button{Content=content,CornerRadius=new CornerRadius(15),BorderThickness=new Thickness(0),Padding=new Thickness(10,5,10,5),Background=selected?Ui.AccentBrush(46):Ui.Brush(ColorHelper.FromArgb(18,145,154,180))};
+            var button=new Button{Content=content,Height=28,MinHeight=0,CornerRadius=new CornerRadius(15),BorderThickness=new Thickness(0),Padding=new Thickness(10,4,10,4),Background=selected?Ui.AccentBrush(46):Ui.Brush(ColorHelper.FromArgb(18,145,154,180))};
             if(selected){button.Resources["ButtonBackgroundPointerOver"]=Ui.AccentBrush(65);button.Resources["ButtonBackgroundPressed"]=Ui.AccentBrush(78);}
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button,$"切换城市：{city.Name}");
             button.Click+=(_,_)=>{ConfirmCity(city);};
@@ -129,14 +132,14 @@ internal sealed class WeatherWindow : SurfaceWindow
             cities.Children.Add(button);
         }
         var add=Ui.IconButton("\uE710","添加城市",(_,_)=>ToggleSearch());add.Width=add.Height=28;if(add.Content is FontIcon addIcon)addIcon.FontSize=15;cities.Children.Add(add);
-        return new ScrollViewer{Content=cities,HorizontalScrollMode=ScrollMode.Enabled,VerticalScrollMode=ScrollMode.Disabled,HorizontalScrollBarVisibility=ScrollBarVisibility.Auto,VerticalScrollBarVisibility=ScrollBarVisibility.Disabled};
+        return new ScrollViewer{Content=cities,Height=28,HorizontalScrollMode=ScrollMode.Enabled,VerticalScrollMode=ScrollMode.Disabled,HorizontalScrollBarVisibility=ScrollBarVisibility.Auto,VerticalScrollBarVisibility=ScrollBarVisibility.Disabled};
     }
     internal void ApplyEffects(){if(App.Instance.Forecast is {} f)_atmosphere.Update(f.Code,f.IsDay,App.Instance.Prefs.Animations);}
     private void PositionLight()
     {
         if(_currentWeather?.IsLoaded!=true)return;
         var point=_currentWeather.TransformToVisual(Root).TransformPoint(new Point(34,34));
-        _weatherLight.Margin=new Thickness(point.X-150,point.Y-110,0,0);_weatherLight.Visibility=point.Y < -40||point.Y>Root.ActualHeight+40?Visibility.Collapsed:Visibility.Visible;
+        _weatherLight.Margin=new Thickness(point.X+64-167,point.Y+13-122,0,0);_weatherLight.Visibility=point.Y < -40||point.Y>Root.ActualHeight+40?Visibility.Collapsed:Visibility.Visible;
     }
     private static Grid Summary(string label,string value,int kind,string? direction=null)
     {

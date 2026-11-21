@@ -1,4 +1,4 @@
-param([string]$Version='0.7.56')
+param([string]$Version='0.7.58')
 $ErrorActionPreference='Stop'
 $workspace=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 $payload=Join-Path $workspace "work\package-$Version"
