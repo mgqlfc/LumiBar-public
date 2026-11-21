@@ -13,6 +13,11 @@ on:
         required: true
         default: false
         type: boolean
+      publish_prerelease:
+        description: 'Publish a Windows 11 x64 pre-release with the EXE installer'
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -26,6 +31,8 @@ jobs:
     name: Windows x64 installer
     runs-on: windows-2022
     timeout-minutes: 35
+    permissions:
+      contents: write
     defaults:
       run:
         shell: pwsh
@@ -78,3 +85,26 @@ jobs:
             outputs/安装包/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 14
+      - name: Publish Windows 11 pre-release
+        if: ${{ inputs.publish_prerelease }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          $version=$env:RELEASE_VERSION
+          $original=Join-Path 'outputs/安装包' "LumiBar-$version-windows-x64-setup.exe"
+          if(-not(Test-Path -LiteralPath $original)){
+            throw 'Pre-release publishing currently requires the native Windows installer; leave include_antigravity unchecked.'
+          }
+          $asset=Join-Path 'outputs/安装包' "LumiBar-$version-Windows11-x64-Setup.exe"
+          Copy-Item -LiteralPath $original -Destination $asset
+          $hash=(Get-FileHash -LiteralPath $asset -Algorithm SHA256).Hash.ToLowerInvariant()
+          $notesFile=Join-Path 'work/installer' "RELEASE-NOTES-$version.md"
+          $notes=if(Test-Path -LiteralPath $notesFile){Get-Content -LiteralPath $notesFile -Raw}else{'Windows 11 x64 EXE 安装版。中文默认思源黑体，西文默认 Geist。'}
+          $notes+="`n`nSHA-256: $hash`n"
+          $body=Join-Path $env:RUNNER_TEMP 'lumibar-release-notes.md'
+          [IO.File]::WriteAllText($body,$notes,[Text.UTF8Encoding]::new($false))
+          $tag="v$version-preview.1"
+          gh release create $tag $asset --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --prerelease --title "LumiBar $version 预发布 · Windows 11 x64" --notes-file $body
+          if($LASTEXITCODE-ne0){throw 'Pre-release publishing failed'}
+          "Published $tag with Windows 11 installer" >> $env:GITHUB_STEP_SUMMARY

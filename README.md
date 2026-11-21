@@ -46,6 +46,8 @@ Antigravity 前端新增 Win2D 1.3.2、锁文件与离线构建脚本。最新�
 
 公开安装包在 [Releases](https://github.com/mgqlfc/LumiBar-public/releases) 下载，中文默认思源黑体、西文默认 Geist。当前仅提供 Windows 11 x64 EXE 安装版。
 
+在 Build Release 中勾选 `publish_prerelease`，构建完成后会创建预发布版并上传 EXE 到 Releases；该选项默认关闭。发布时保持 `include_antigravity` 不勾选。
+
 自行构建时，GitHub 页面打开 **Actions → Build Release → Run workflow**，分支选 `main`，版本留空会读取工程版本；可勾选 `include_antigravity`。运行成功后，在该次运行底部的 **Artifacts** 下载 `LumiBar-版本-windows-x64`，解压即可得到 EXE 安装包和 SHA-256 校验文件。该流程生成 Windows 安装包，使用 GitHub 的 Windows 构建机，Mac 上也能从网页触发。产物保留 14 天。
 
 本机入口 `work/installer/build-release.ps1` 发布自包含程序并调用 Inno Setup。编译器从 `-IsccPath`、`LUMIBAR_ISCC`、本机工具目录或已安装的 Inno Setup 查找。
