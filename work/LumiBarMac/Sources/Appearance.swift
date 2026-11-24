@@ -1,35 +1,15 @@
 import SwiftUI
 
-struct AccentPalette: Identifiable {
-    let id: String
-    let name: String
-    let light: UInt32
-    let mid: UInt32
-    let dark: UInt32
-
-    var color: Color { Self.color(mid) }
-    var gradient: LinearGradient {
-        LinearGradient(stops: [.init(color: Self.color(light), location: 0),
-                               .init(color: Self.color(mid), location: 0.46),
-                               .init(color: Self.color(dark), location: 1)],
-                       startPoint: .topLeading, endPoint: .bottomTrailing)
-    }
-
-    static let all: [Self] = [
-        .init(id: "blue", name: "冰糖蓝", light: 0x6CE7DA, mid: 0x21BEC2, dark: 0x118FB1),
-        .init(id: "mint", name: "薄荷绿", light: 0xBAF0D6, mid: 0x6BCDAA, dark: 0x399F8C),
-        .init(id: "lime", name: "青柠糖", light: 0xE0EEB3, mid: 0xB4CF82, dark: 0x7DA56C),
-        .init(id: "butter", name: "奶油黄", light: 0xFFF1B6, mid: 0xF0D47A, dark: 0xD0B365),
-        .init(id: "apricot", name: "奶杏橙", light: 0xFFE0BB, mid: 0xF2BA91, dark: 0xD99579),
-        .init(id: "peach", name: "蜜桃粉", light: 0xFFD3DF, mid: 0xF0ACC9, dark: 0xD48EB6),
-        .init(id: "berry", name: "莓果红", light: 0xFFD0CE, mid: 0xEF9EA9, dark: 0xD17F9C),
-        .init(id: "lavender", name: "薰衣紫", light: 0xE5D5FF, mid: 0xC6ACEF, dark: 0xA58BDA),
-        .init(id: "periwinkle", name: "绣球蓝", light: 0xD2E3FF, mid: 0xA9C4F3, dark: 0x86A5DE)
-    ]
-
-    static func color(_ value: UInt32) -> Color {
-        Color(red: Double((value >> 16) & 255) / 255, green: Double((value >> 8) & 255) / 255,
-              blue: Double(value & 255) / 255)
+extension Color {
+    static func rgb(_ value: UInt32, saturation: Double = 1) -> Color {
+        let red = Double((value >> 16) & 255) / 255
+        let green = Double((value >> 8) & 255) / 255
+        let blue = Double(value & 255) / 255
+        guard saturation != 1 else { return Color(red: red, green: green, blue: blue) }
+        let gray = red * 0.2126 + green * 0.7152 + blue * 0.0722
+        return Color(red: gray + (red - gray) * saturation,
+                     green: gray + (green - gray) * saturation,
+                     blue: gray + (blue - gray) * saturation)
     }
 }
 
@@ -54,9 +34,6 @@ final class AppearanceModel {
             onThemeChange?()
         }
     }
-    var accentID: String {
-        didSet { defaults.set(accentID, forKey: "appearance.accent") }
-    }
     var glassDensity: Double {
         didSet { defaults.set(glassDensity, forKey: "appearance.glassDensity") }
     }
@@ -72,7 +49,6 @@ final class AppearanceModel {
     var coverSaturation: Double {
         didSet { defaults.set(coverSaturation, forKey: "appearance.coverSaturation"); onEntryChange?() }
     }
-    var accent: AccentPalette { AccentPalette.all.first { $0.id == accentID } ?? AccentPalette.all[7] }
     var windowAppearance: NSAppearance? {
         switch theme {
         case "Dark": NSAppearance(named: .darkAqua)
@@ -88,7 +64,6 @@ final class AppearanceModel {
         let size = defaults.object(forKey: "appearance.lyricsSize") as? Double ?? 22
         lyricsSize = size.isFinite ? min(36, max(18, size)) : 22
         theme = defaults.string(forKey: "appearance.theme") ?? "System"
-        accentID = defaults.string(forKey: "appearance.accent") ?? "lavender"
         let density = defaults.object(forKey: "appearance.glassDensity") as? Double ?? 0.50
         glassDensity = density.isFinite ? min(0.95, max(0.35, density)) : 0.50
         coverTint = defaults.object(forKey: "appearance.coverTint") as? Bool ?? true
@@ -102,13 +77,13 @@ final class AppearanceModel {
     func tint(_ scheme: ColorScheme) -> Color {
         let density = min(0.95, max(0.35, glassDensity))
         if scheme == .dark {
-            return AccentPalette.color(0x141927).opacity(0.40 + (density - 0.35) * 0.62)
+            return Color.rgb(0x141927).opacity(0.40 + (density - 0.35) * 0.62)
         }
         return Color.white.opacity(0.34 + (density - 0.35) * 0.37)
     }
 
     func styledText(_ value: String, size: CGFloat, weight: Font.Weight = .regular) -> Text {
-        let pieces = scriptRuns(value)
+        let pieces = Self.scriptRuns(value)
         var content = AttributedString()
         for (part, chinese) in pieces {
             var run = AttributedString(part)
@@ -122,22 +97,27 @@ final class AppearanceModel {
         return Text(content)
     }
 
-    func textWidth(_ value: String, size: CGFloat, semibold: Bool = false) -> CGFloat {
-        scriptRuns(value).reduce(0) { total, run in
-            let fallback = NSFont.systemFont(ofSize: size, weight: semibold ? .semibold : .regular)
+    func textWidth(_ value: String, size: CGFloat, weight: Font.Weight = .regular) -> CGFloat {
+        let (systemWeight, familyWeight): (NSFont.Weight, Int) = switch weight {
+        case .medium: (.medium, 6)
+        case .semibold: (.semibold, 8)
+        default: (.regular, 5)
+        }
+        let fallback = NSFont.systemFont(ofSize: size, weight: systemWeight)
+        return Self.scriptRuns(value).reduce(0) { total, run in
             let font = fontFamily(forChinese: run.1).flatMap {
-                NSFontManager.shared.font(withFamily: $0, traits: [], weight: semibold ? 8 : 5, size: size)
+                NSFontManager.shared.font(withFamily: $0, traits: [], weight: familyWeight, size: size)
             } ?? fallback
             return total + (run.0 as NSString).size(withAttributes: [.font: font]).width
         }
     }
 
-    private func fontFamily(forChinese chinese: Bool) -> String? {
+    func fontFamily(forChinese chinese: Bool) -> String? {
         if chinese { return chineseFont.isEmpty ? nil : chineseFont }
         return westernFont.isEmpty ? "Geist" : westernFont
     }
 
-    private func scriptRuns(_ value: String) -> [(String, Bool)] {
+    nonisolated static func scriptRuns(_ value: String) -> [(String, Bool)] {
         var result: [(String, Bool)] = []
         for character in value {
             let han = character.unicodeScalars.contains { scalar in
@@ -155,189 +135,187 @@ final class AppearanceModel {
 }
 
 struct SettingsView: View {
-    enum Page: String, CaseIterable {
-        case general = "常规"
-        case appearance = "外观"
-        case entries = "菜单栏"
-        case weather = "天气"
-        case music = "音乐与歌词"
-        case plugins = "插件"
+    private enum Page: String, CaseIterable {
+        case general = "通用"
+        case menuBar = "菜单栏"
+        case lyrics = "歌词"
         case about = "关于"
 
         var symbol: String {
             switch self {
             case .general: "gearshape"
-            case .appearance: "pencil"
-            case .entries: "menubar.rectangle"
-            case .weather: "sun.max"
-            case .music: "music.note"
-            case .plugins: "puzzlepiece.extension"
+            case .menuBar: "menubar.rectangle"
+            case .lyrics: "captions.bubble"
             case .about: "info.circle"
             }
         }
     }
 
+    private enum MenuBarPage: String, CaseIterable {
+        case weather = "天气胶囊"
+        case music = "音乐胶囊"
+    }
+
+    private enum LyricsPage: String, CaseIterable {
+        case display = "Lumi 歌词"
+        case sources = "播放与歌词来源"
+    }
+
     @Bindable var appearance: AppearanceModel
     @Bindable var weather: WeatherModel
     @Bindable var music: MusicModel
-    var close: () -> Void = {}
-    @ViewState private var page: Page = .appearance
-    @Environment(\.colorScheme) private var colorScheme
+    var openLyricLibrary: () -> Void = {}
+    @ViewState private var page: Page = .general
+    @ViewState private var menuBarPage: MenuBarPage = .weather
+    @ViewState private var lyricsSubpage: LyricsPage = .display
+    @ViewState private var addingFavoriteCity = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    nonisolated static let windowSize = CGSize(width: 800, height: 650)
+    private static let sidebarWidth: CGFloat = 188
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 10) {
-                Image(nsImage: NSApplication.shared.applicationIconImage).resizable()
-                    .scaledToFit().frame(width: 26, height: 26)
-                appearance.styledText("LumiBar", size: 21, weight: .semibold)
-                Spacer()
-                Button(action: close) {
-                    Image(systemName: "xmark").font(.system(size: 16, weight: .light))
-                        .frame(width: 31, height: 34).contentShape(Rectangle())
-                }.buttonStyle(.plain).keyboardShortcut("w", modifiers: .command).accessibilityLabel("关闭设置")
-            }.padding(.horizontal, 20).frame(height: 54)
+        HStack(spacing: 0) {
+            sidebar
             Divider()
-            HStack(spacing: 0) {
-                VStack(alignment: .leading, spacing: 6) {
-                    ForEach(Page.allCases, id: \.self) { item in
-                        Button { page = item } label: {
-                            HStack(spacing: 10) {
-                                Image(systemName: item.symbol).font(.system(size: 16, weight: .light)).frame(width: 18)
-                                appearance.styledText(item.rawValue, size: 15)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, 12).frame(height: 42)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(SettingsNavigationStyle(selected: page == item, color: appearance.accent.color))
-                        .accessibilityAddTraits(page == item ? .isSelected : [])
-                    }
-                    Spacer(minLength: 0)
-                }
-                .frame(width: 144).padding(.horizontal, 14).padding(.top, 22)
+            VStack(spacing: 0) {
+                pageHeader
+                Divider().opacity(0.65)
                 ScrollView {
-                    switch page {
-                    case .general:
-                        VStack(alignment: .leading, spacing: 18) {
-                            heading("常规", "LumiBar 在菜单栏运行")
-                            Toggle("显示音乐入口", isOn: $music.showMusic)
-                            Toggle("动态光效", isOn: $appearance.animation)
-                        }.padding(24).frame(maxWidth: .infinity, alignment: .leading)
-                    case .appearance: appearancePage
-                    case .entries:
-                        VStack(alignment: .leading, spacing: 18) {
-                            heading("菜单栏", "调整菜单栏入口")
-                            Toggle("显示音乐入口", isOn: $music.showMusic)
-                        }.padding(24).frame(maxWidth: .infinity, alignment: .leading)
-                    case .weather: weatherPage
-                    case .music: musicPage
-                    case .plugins:
-                        heading("插件", "当前 Mac 版使用内置前端。Windows 外部前端的配置由 Windows 客户端管理。")
-                            .padding(24).frame(maxWidth: .infinity, alignment: .leading)
-                    case .about:
-                        heading("关于 LumiBar", "macOS 版 · " + (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""))
-                            .padding(24).frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                }.scrollIndicators(.visible)
+                    content
+                        .padding(.horizontal, 26).padding(.vertical, 21)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .nativeOverlayScrollIndicator()
+                }
+                .scrollBounceBehavior(.basedOnSize)
+                .id([page.rawValue, menuBarPage.rawValue, lyricsSubpage.rawValue])
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(width: 560, height: 650)
-        .tint(appearance.accent.color)
-        .modifier(FlyoutChrome(appearance: appearance))
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private var appearancePage: some View {
-        VStack(alignment: .leading, spacing: 26) {
-            heading("外观与光效", "让界面通透起来，让音乐染上颜色。")
-            VStack(alignment: .leading, spacing: 9) {
-                Text("主题").font(.headline)
-                HStack(spacing: 0) {
-                    ForEach([("System", "跟随系统"), ("Light", "浅色"), ("Dark", "深色")], id: \.0) { value, label in
-                        Button { appearance.theme = value } label: {
-                            appearance.styledText(label, size: 12, weight: .medium)
-                                .frame(maxWidth: .infinity).frame(height: 27).contentShape(Rectangle())
-                        }
-                        .buttonStyle(SettingsThemeStyle(selected: appearance.theme == value, color: appearance.accent.color))
-                        .accessibilityAddTraits(appearance.theme == value ? .isSelected : [])
+    private var sidebar: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            ForEach(Page.allCases, id: \.self) { option in
+                let selected = page == option
+                Button { page = option } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: option.symbol)
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundStyle(selected ? Color.accentColor : .secondary)
+                            .frame(width: 19)
+                            .accessibilityHidden(true)
+                        Text(option.rawValue)
+                            .font(.body.weight(selected ? .semibold : .medium))
+                            .lineLimit(1)
                     }
-                }.padding(3).background(Color.primary.opacity(0.045), in: Capsule())
-            }
-            VStack(alignment: .leading, spacing: 13) {
-                HStack {
-                    Text("强调色").font(.headline)
-                    Spacer()
-                    Text(appearance.accent.name).font(.caption).foregroundStyle(.secondary)
+                    .padding(.horizontal, 10)
+                    .frame(maxWidth: .infinity, minHeight: 36, alignment: .leading)
+                    .contentShape(RoundedRectangle(cornerRadius: 10))
+                    .glassEffect(selected ? .regular.tint(Color.accentColor.opacity(0.34)).interactive() : .identity,
+                                 in: RoundedRectangle(cornerRadius: 10))
                 }
-                HStack(spacing: 7) {
-                    ForEach(AccentPalette.all) { palette in
-                        let selected = appearance.accentID == palette.id
-                        Button { appearance.accentID = palette.id } label: {
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(palette.gradient).frame(width: 28, height: 28)
-                                .overlay {
-                                    if selected {
-                                        Image(systemName: "checkmark.circle.fill").font(.system(size: 14))
-                                            .symbolRenderingMode(.palette).foregroundStyle(.black.opacity(0.65), .white)
-                                    }
-                                }
-                                .overlay {
-                                    if selected { RoundedRectangle(cornerRadius: 10).strokeBorder(.primary.opacity(0.7))
-                                        .padding(-3) }
-                                }
-                                .padding(2)
-                        }
-                        .buttonStyle(.plain).help(palette.name).accessibilityLabel(palette.name)
-                        .accessibilityAddTraits(selected ? .isSelected : [])
-                    }
-                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(selected ? .isSelected : [])
             }
-            VStack(alignment: .leading, spacing: 10) {
-                Text("玻璃密度").font(.headline)
-                HStack(spacing: 12) {
-                    Slider(value: $appearance.glassDensity, in: 0.35...0.95, step: 0.01)
-                        .accessibilityLabel("玻璃密度")
-                    Text(appearance.glassDensity.formatted(.percent.precision(.fractionLength(0))))
-                        .font(.subheadline.monospacedDigit()).frame(width: 42, alignment: .trailing)
-                }.frame(height: 26).padding(.trailing, 10)
-            }
-            Divider()
-            toggleRow("封面着色", "根据当前播放的封面，在界面上融入柔和的色彩", binding: $appearance.coverTint)
-            Divider()
-            toggleRow("动态光效", "随着音乐播放呈现轻柔的流动光效", binding: $appearance.animation)
-            Divider()
-            Text("效果预览").font(.headline)
-            HStack(spacing: 9) {
-                HStack(spacing: 8) {
-                    if let art = music.artwork {
-                        Image(nsImage: art).resizable().scaledToFill().frame(width: 36, height: 36)
-                            .clipShape(RoundedRectangle(cornerRadius: 7))
-                    } else {
-                        Image(systemName: "music.note").frame(width: 36, height: 36)
-                            .background(.white.opacity(0.18), in: RoundedRectangle(cornerRadius: 7))
-                    }
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(music.track?.title ?? "音乐岛").font(lumiFont(15, weight: .semibold)).lineLimit(1)
-                        Text(music.track?.artist ?? "预览").font(lumiFont(11)).foregroundStyle(.secondary).lineLimit(1)
-                    }
-                    Spacer(minLength: 0)
-                }
-                .padding(9)
-                .background(appearance.coverTint ? music.colors[0].opacity(appearance.coverBlend) : .clear,
-                            in: RoundedRectangle(cornerRadius: 15))
-                HStack(spacing: 4) {
-                    if let glyph = WeatherGlyph.image(0, day: false) {
-                        Image(nsImage: glyph).resizable().scaledToFit().frame(width: 20, height: 20)
-                    }
-                    Text(weather.weather.map { weather.temperature($0.temperature) } ?? "3°")
-                }.padding(8).background(.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 11))
-            }
-            .padding(8).glassEffect(.regular, in: RoundedRectangle(cornerRadius: 18))
-            percentControl("着色浓度", value: $appearance.coverBlend, range: 0.08...0.55)
-            percentControl("封面饱和度", value: $appearance.coverSaturation, range: 0...1)
-            FontChoice(title: "中文字体", defaultName: "系统字体", family: $appearance.chineseFont)
-            FontChoice(title: "西文字体", defaultName: "Geist", family: $appearance.westernFont)
+            Spacer(minLength: 0)
         }
-        .padding(24)
+        .padding(.horizontal, 13).padding(.top, 17)
+        .frame(width: Self.sidebarWidth)
+        .accessibilityElement(children: .contain).accessibilityLabel("设置分类")
+    }
+
+    private var pageHeader: some View {
+        HStack(spacing: 10) {
+            Text(page.rawValue)
+                .font(.title2.weight(.semibold))
+                .accessibilityAddTraits(.isHeader)
+            Spacer(minLength: 0)
+            switch page {
+            case .menuBar:
+                LibraryGlassSegments(selection: $menuBarPage, choices: MenuBarPage.allCases) { $0.rawValue }
+                    .accessibilityElement(children: .contain).accessibilityLabel("菜单栏组件")
+            case .lyrics:
+                LibraryGlassSegments(selection: $lyricsSubpage, choices: LyricsPage.allCases) { $0.rawValue }
+                    .accessibilityElement(children: .contain).accessibilityLabel("歌词设置分类")
+                Button("歌词管理", systemImage: "music.note.list", action: openLyricLibrary)
+                    .buttonStyle(.glass)
+                    .accessibilityLabel("打开歌词管理…")
+            case .general, .about:
+                EmptyView()
+            }
+        }
+        .controlSize(.small)
+        .padding(.horizontal, 26).frame(height: 51)
+    }
+
+    @ViewBuilder private var content: some View {
+        switch page {
+        case .general: generalPage
+        case .menuBar:
+            switch menuBarPage {
+            case .weather: weatherPage
+            case .music: musicCapsulePage
+            }
+        case .lyrics:
+            switch lyricsSubpage {
+            case .display: lyricsPage
+            case .sources: musicPage
+            }
+        case .about: aboutPage
+        }
+    }
+
+    private var generalPage: some View {
+        VStack(alignment: .leading, spacing: 23) {
+            settingsSection("外观") {
+                settingsSegments("主题", selection: $appearance.theme, choices: ["System", "Light", "Dark"]) {
+                    switch $0 {
+                    case "Light": "浅色"
+                    case "Dark": "深色"
+                    default: "跟随系统"
+                    }
+                }
+                percentControl("玻璃密度", value: $appearance.glassDensity, range: 0.35...0.95)
+                toggleRow("动态光效", "让胶囊和面板的光效流动", binding: $appearance.animation)
+            }
+            Divider()
+            settingsSection("界面字体") {
+                HStack(alignment: .top, spacing: 21) {
+                    FontChoice(title: "中文字体", defaultName: "系统字体", family: $appearance.chineseFont)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    FontChoice(title: "西文字体", defaultName: "Geist", family: $appearance.westernFont)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+        }
+    }
+
+    private func settingsSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 11) {
+            Text(title).font(.headline).accessibilityAddTraits(.isHeader)
+            content()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func settingsSegments<Value: Hashable>(_ label: String, selection: Binding<Value>, choices: [Value],
+                                                    title: @escaping (Value) -> String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(label).font(.subheadline.weight(.medium)).accessibilityHidden(true)
+            LibraryGlassSegments(selection: selection, choices: choices, stretches: true, title: title)
+                .accessibilityElement(children: .contain).accessibilityLabel(label)
+        }
+    }
+
+    private func capsulePreview<Content: View>(moving: Bool,
+                                               @ViewBuilder content: @escaping (TimeInterval?) -> Content) -> some View {
+        let animates = moving && appearance.animation && !reduceMotion
+        return TimelineView(.animation(minimumInterval: 1 / 18, paused: !animates)) { context in
+            content(animates ? context.date.timeIntervalSinceReferenceDate : nil)
+        }
+        .frame(maxWidth: .infinity, minHeight: 42, alignment: .leading)
     }
 
     private func percentControl(_ label: String, value: Binding<Double>, range: ClosedRange<Double>) -> some View {
@@ -370,72 +348,419 @@ struct SettingsView: View {
     }
 
     private var weatherPage: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            heading("天气", "城市、单位和数据来源")
-            Toggle("华氏温度", isOn: $weather.fahrenheit)
-            Toggle("风速使用 m/s", isOn: $weather.windMetersPerSecond)
-            Divider()
-            Toggle("优先使用 LumiBar 天气代理", isOn: $weather.proxyEnabled)
-            if weather.proxyEnabled {
-                TextField("HTTPS 服务地址", text: $weather.proxy)
-                if WeatherAPI.proxyURL(weather.proxy) == nil { Text("请输入有效的 HTTPS 地址。").foregroundStyle(.red) }
+        VStack(alignment: .leading, spacing: 20) {
+            settingsSection("预览与显示") {
+                capsulePreview(moving: weather.capsuleGlow && weather.tintScale > 0) { time in
+                    let lite = weather.liteCapsule
+                    let width = lite ? MusicView.entryWidth : 2 * MusicView.entryWidth + MenuBarCapsuleShape.entryGap
+                    WeatherCapsule(model: weather, appearance: appearance, height: MenuBarCapsuleShape.entryHeight,
+                                   minimumWidth: width, showsPrecipitation: !lite, lightTime: time, showsSample: true)
+                }
+                .accessibilityLabel("天气胶囊预览")
+                Toggle("显示天气胶囊", isOn: $weather.showWeather)
+                Toggle("始终使用 Lite 天气胶囊", isOn: $weather.liteCapsule)
             }
-            Button("应用并刷新天气") { weather.refresh() }
-                .disabled(weather.city == nil || (weather.proxyEnabled && WeatherAPI.proxyURL(weather.proxy) == nil))
-            Button("定位当前区县") { weather.locate() }
-        }.padding(24).frame(maxWidth: .infinity, alignment: .leading)
+            Divider()
+            settingsSection("流光与着色") {
+                Toggle("天气胶囊流光", isOn: $weather.capsuleGlow)
+                Toggle("天气着色", isOn: $weather.capsuleTint)
+                HStack(alignment: .top, spacing: 21) {
+                    percentControl("着色强度", value: $weather.capsuleTintStrength, range: 0...1)
+                    percentControl("着色饱和度", value: $weather.capsuleTintSaturation, range: 0...1)
+                }.disabled(!weather.capsuleTint)
+            }
+            Divider()
+            favoriteCities
+            Divider()
+            settingsSection("显示单位") {
+                Toggle("华氏温度", isOn: $weather.fahrenheit)
+                settingsSegments("风速显示", selection: $weather.windUnit, choices: WeatherWindUnit.allCases) { $0.title }
+            }
+            Divider()
+            settingsSection("天气详情显示") {
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), alignment: .leading), count: 2), spacing: 10) {
+                    ForEach(WeatherDetailItem.allCases, id: \.self) { item in
+                        Toggle(item.title, isOn: Binding(get: { weather.showsDetail(item) },
+                                                         set: { weather.setDetail(item, visible: $0) }))
+                    }
+                }
+            }
+            Divider()
+            settingsSection("数据来源") {
+                Toggle("优先使用 LumiBar 天气代理", isOn: $weather.proxyEnabled)
+                if weather.proxyEnabled {
+                    TextField("HTTPS 服务地址", text: $weather.proxy).textFieldStyle(.roundedBorder)
+                    if WeatherAPI.proxyURL(weather.proxy) == nil { Text("请输入有效的 HTTPS 地址。").foregroundStyle(.red) }
+                }
+                Button("应用并刷新天气") { weather.refresh() }
+                    .buttonStyle(.glass)
+                    .disabled(weather.city == nil || (weather.proxyEnabled && WeatherAPI.proxyURL(weather.proxy) == nil))
+            }
+        }
+    }
+
+    private var favoriteCities: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("收藏城市").font(.headline).accessibilityAddTraits(.isHeader)
+                Spacer()
+                Button("添加城市…") { addingFavoriteCity = true }
+                    .buttonStyle(.glass)
+                    .disabled(weather.favorites.count >= WeatherModel.favoriteLimit)
+                    .popover(isPresented: $addingFavoriteCity) {
+                        ScrollView {
+                            WeatherCitySearch(model: weather, canSelect: { !weather.isFavorite($0) }) { city in
+                                weather.addFavorite(city)
+                                addingFavoriteCity = false
+                            }.padding(14)
+                        }.frame(width: 360).frame(maxHeight: 320)
+                    }
+            }
+            if weather.favorites.isEmpty {
+                Text("还没有收藏城市。").font(.subheadline).foregroundStyle(.secondary)
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(Array(weather.favorites.enumerated()), id: \.element.id) { index, city in
+                        if index > 0 { Divider().padding(.horizontal, 10) }
+                        favoriteCityRow(city, index: index)
+                    }
+                }
+            }
+            HStack(spacing: 10) {
+                Button("定位当前区县") { weather.locate() }
+                if let city = weather.city, !weather.isFavorite(city) {
+                    Button("收藏当前城市") { weather.addFavorite(city) }
+                        .disabled(weather.favorites.count >= WeatherModel.favoriteLimit)
+                }
+            }
+            if weather.favorites.count >= WeatherModel.favoriteLimit {
+                Text("最多收藏 \(WeatherModel.favoriteLimit) 个城市。").font(.caption).foregroundStyle(.secondary)
+            }
+            if let error = weather.locationError { Text(error).font(.caption).foregroundStyle(.secondary) }
+        }
+    }
+
+    private func favoriteCityRow(_ city: City, index: Int) -> some View {
+        let selected = !weather.usingLocation && weather.city?.id == city.id
+        return HStack(spacing: 4) {
+            Button { weather.select(city) } label: {
+                HStack(spacing: 7) {
+                    Text(city.name).fontWeight(selected ? .semibold : .regular).lineLimit(1)
+                    if let region = city.region {
+                        Text(region).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    }
+                    if selected { Image(systemName: "checkmark").font(.caption).foregroundStyle(Color.accentColor) }
+                }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityAddTraits(selected ? .isSelected : [])
+            .help("查看\(city.name)的天气")
+            favoriteCityButton("chevron.up", label: "上移\(city.name)") { weather.moveFavorite(city, by: -1) }
+                .disabled(index == 0)
+            favoriteCityButton("chevron.down", label: "下移\(city.name)") { weather.moveFavorite(city, by: 1) }
+                .disabled(index == weather.favorites.count - 1)
+            favoriteCityButton("trash", label: "移除\(city.name)收藏") { weather.removeFavorite(city) }
+        }.padding(.leading, 12).padding(.trailing, 6).frame(height: 34)
+    }
+
+    private func favoriteCityButton(_ symbol: String, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol).font(.system(size: 11, weight: .medium)).frame(width: 16, height: 15)
+                .contentShape(Rectangle())
+        }.buttonStyle(.glass).controlSize(.small).accessibilityLabel(label).help(label)
+    }
+
+    private var musicCapsulePage: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            settingsSection("预览与显示") {
+                capsulePreview(moving: music.capsuleGlow && appearance.coverTint) { time in
+                    let bands = MusicView.entryBands(from: [0.22, 0.62, 0.38, 0.84, 0.54],
+                                                    response: music.capsuleSpectrumResponse)
+                    MusicView(model: music, appearance: appearance,
+                              surface: .entry(height: MenuBarCapsuleShape.entryHeight, bands: bands,
+                                              playback: nil, lightTime: time), toggle: {})
+                }
+                .accessibilityLabel("音乐胶囊预览")
+                Toggle("显示音乐胶囊", isOn: $music.showMusic)
+            }
+            Divider()
+            settingsSection("流光与着色") {
+                Toggle("音乐胶囊流光", isOn: $music.capsuleGlow)
+                Toggle("封面着色", isOn: $appearance.coverTint)
+                    .help("用于音乐胶囊、曲目信息浮窗和展开的 Lumi 歌词。")
+                HStack(alignment: .top, spacing: 21) {
+                    percentControl("着色强度", value: $appearance.coverBlend, range: 0.08...0.55)
+                    percentControl("着色饱和度", value: $appearance.coverSaturation, range: 0...1)
+                }.disabled(!appearance.coverTint)
+            }
+            Divider()
+            settingsSection("音乐频谱") {
+                Toggle("实时频谱（系统音频权限）", isOn: $music.spectrumEnabled)
+                lyricSettingSlider("频谱响应", value: $music.capsuleSpectrumResponse,
+                                   range: MusicModel.capsuleSpectrumResponseRange, step: 0.1, unit: "×")
+                Text("调高后，较轻的声音也能带动频谱柱条。")
+                    .font(.caption).foregroundStyle(.secondary)
+                if let error = music.audioError { Text(error).font(.caption).foregroundStyle(.secondary) }
+            }
+        }
     }
 
     private var musicPage: some View {
         VStack(alignment: .leading, spacing: 16) {
-            heading("音乐与歌词", "设置音乐岛、播放器与同步歌词")
-            Button("连接网易云音乐…") { music.connectNetease() }.buttonStyle(.glassProminent)
+            Text("播放器连接").font(.title3.weight(.semibold))
+            Button {
+                music.connectNetease()
+            } label: {
+                Text(SystemMedia.executable == nil ? "连接网易云音乐…" : "检查系统播放连接")
+            }.buttonStyle(.glassProminent)
             if let status = music.neteaseStatus { Text(status).font(.caption).foregroundStyle(.secondary) }
-            Divider()
-            Toggle("显示音乐岛", isOn: $music.showMusic)
-            Toggle("实时频谱（系统音频权限）", isOn: $music.spectrumEnabled)
-            Toggle("在线查找同步歌词", isOn: $music.onlineLyrics)
-            VStack(alignment: .leading, spacing: 8) {
-                Text("歌词字号").font(.headline)
-                HStack {
-                    Slider(value: $appearance.lyricsSize, in: 18...36, step: 1).accessibilityLabel("歌词字号")
-                    Text(Int(appearance.lyricsSize).formatted()).frame(width: 30, alignment: .trailing)
-                }
-            }
-            if let error = music.audioError { Text(error).font(.caption).foregroundStyle(.secondary) }
-            Text("Apple Music 和 Spotify 使用 macOS 自动化权限。")
+            Text(SystemMedia.executable == nil ? "Apple Music 和 Spotify 使用 macOS 自动化权限。"
+                 : "支持通过 macOS 正在播放识别和控制播放器。")
                 .font(.caption).foregroundStyle(.secondary)
             if let error = music.automationError {
                 Text(error).font(.caption).foregroundStyle(.secondary)
                 Button("重新检查自动化权限") { music.retryAutomation() }
             }
-        }.padding(24).frame(maxWidth: .infinity, alignment: .leading)
+            Divider()
+            VStack(alignment: .leading, spacing: 8) {
+                lyricSettingSlider("播放时间校准", value: $music.playbackCalibration,
+                                   range: MusicModel.playbackCalibrationRange, step: 0.1, unit: "秒", signed: true)
+                Text("正值让进度和歌词提前显示。每首歌的歌词时移仍可单独设置。")
+                    .font(.caption).foregroundStyle(.secondary)
+                Button("重置播放时间校准") { music.playbackCalibration = 0 }
+                    .buttonStyle(.glass)
+                    .disabled(music.playbackCalibration == 0)
+            }
+            Divider()
+            lyricSources
+        }
+    }
+
+    private var lyricSources: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("歌词来源").font(.title3.weight(.semibold))
+            Toggle("在线查找同步歌词", isOn: $music.onlineLyrics)
+            Text("自动选择会比较各来源的匹配度与时间轴。分数相同时，排在上方的来源优先。")
+                .font(.caption).foregroundStyle(.secondary)
+            VStack(spacing: 0) {
+                ForEach(Array(music.lyricSourceOrder.enumerated()), id: \.element) { index, source in
+                    if index > 0 { Divider().padding(.horizontal, 10) }
+                    HStack(spacing: 6) {
+                        if source == .appleMusic {
+                            AppleMusicSourceSettings(music: music)
+                        } else {
+                            LyricSourceLabel(source: source)
+                            Spacer()
+                        }
+                        sourceOrderButton(source, up: true, enabled: index > 0)
+                        sourceOrderButton(source, up: false, enabled: index < music.lyricSourceOrder.count - 1)
+                    }.padding(.leading, 12).padding(.trailing, 6).frame(minHeight: source == .appleMusic ? 44 : 32)
+                }
+            }
+            Button("恢复默认顺序") { music.resetLyricSourceOrder() }
+                .buttonStyle(.glass)
+                .disabled(music.lyricSourceOrder == MusicModel.LyricSource.defaultOrder)
+        }
+    }
+
+    private func sourceOrderButton(_ source: MusicModel.LyricSource, up: Bool, enabled: Bool) -> some View {
+        Button {
+            music.moveLyricSource(source, by: up ? -1 : 1)
+        } label: {
+            Image(systemName: up ? "chevron.up" : "chevron.down")
+                .font(.system(size: 10, weight: .semibold))
+                .frame(width: 16, height: 15).contentShape(Rectangle())
+        }
+        .buttonStyle(.glass).controlSize(.small)
+        .accessibilityLabel(source.title + (up ? "上移" : "下移"))
+        .disabled(!enabled)
+    }
+
+    private var lyricsPage: some View {
+        let cameraOffsetRange = music.minimumCompactCameraOffset...NotchLyricsOptions.compactCameraOffsetRange.upperBound
+        let cameraOffset = Binding {
+            max(cameraOffsetRange.lowerBound, music.notchLyrics.compactCameraOffset)
+        } set: { offset in
+            music.notchLyrics.compactCameraOffset = offset
+        }
+        return VStack(alignment: .leading, spacing: 16) {
+            settingsSection("显示与隐藏") {
+                Toggle("在摄像头下显示 Lumi 歌词", isOn: $music.notchLyrics.enabled)
+                Toggle(NotchLyricsOptions.hideWhenPausedLabel, isOn: $music.notchLyrics.hidesWhenPaused)
+                Toggle(NotchLyricsOptions.hideInFullScreenLabel, isOn: $music.notchLyrics.hidesInFullScreen)
+                Toggle("鼠标指向时渐淡", isOn: $music.notchLyrics.fadesOnHover)
+            }
+            Divider()
+            Text("面板尺寸").font(.title3.weight(.semibold))
+            HStack(spacing: 20) {
+                lyricSettingSlider("收起宽度", value: $music.notchLyrics.width,
+                                   range: NotchLyricsOptions.compactWidthRange, step: 1)
+                lyricSettingSlider("收起基础高度", value: $music.notchLyrics.compactHeight,
+                                   range: NotchLyricsOptions.compactHeightRange, step: 1)
+                    .help("摄像头与歌词区域的距离保持默认时，面板的最小高度。")
+            }
+            HStack(spacing: 20) {
+                lyricSettingSlider("展开宽度", value: $music.notchLyrics.expandedWidth,
+                                   range: NotchLyricsOptions.expandedWidthRange, step: 1)
+                lyricSettingSlider("展开高度", value: $music.notchLyrics.expandedHeight,
+                                   range: NotchLyricsOptions.expandedHeightRange, step: 1)
+            }
+            Text("面板会为摄像头和两行歌词留足空间。展开宽度至少与收起相同，分段会随实际宽度重算。")
+                .font(.caption).foregroundStyle(.secondary)
+            Toggle("顶部圆角（收起与展开）", isOn: $music.notchLyrics.roundsTopCorners)
+            Divider()
+            VStack(alignment: .leading, spacing: 13) {
+                Text("字体与间距").font(.title3.weight(.semibold))
+                HStack(alignment: .top, spacing: 20) {
+                    FontChoice(title: "歌词中文字体", defaultName: "跟随界面外观", family: $music.notchLyrics.chineseFontFamily)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    FontChoice(title: "歌词西文字体", defaultName: "跟随界面外观", family: $music.notchLyrics.westernFontFamily)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                Picker("歌词与译文字重", selection: $music.notchLyrics.fontWeight) {
+                    Text("常规").tag(400)
+                    Text("中等").tag(500)
+                    Text("半粗").tag(600)
+                    Text("粗体").tag(700)
+                    Text("特粗").tag(800)
+                }
+                HStack(spacing: 20) {
+                    lyricSettingSlider("收起字号", value: $music.notchLyrics.fontSize, range: 10...20, step: 0.5)
+                    lyricSettingSlider("展开字号", value: $appearance.lyricsSize, range: 18...36, step: 1)
+                }
+                lyricSettingSlider("收起首行放大", value: $music.notchLyrics.firstLineExtraSize,
+                                   range: NotchLyricsOptions.firstLineExtraSizeRange, step: 0.5)
+                VStack(alignment: .leading, spacing: 5) {
+                    lyricSettingSlider("摄像头与歌词区域的距离", value: cameraOffset,
+                                       range: cameraOffsetRange, step: 1, signed: true)
+                    Text("以默认距离为 0 pt。调小距离时，收起面板的底部也会随之上移。")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                HStack(spacing: 20) {
+                    lyricSettingSlider("收起上下留白", value: $music.notchLyrics.verticalPadding, range: 1...12, step: 1)
+                    lyricSettingSlider("收起行间距", value: $music.notchLyrics.lineSpacing, range: 0...10, step: 1)
+                }
+            }
+            Divider()
+            VStack(alignment: .leading, spacing: 13) {
+                Text("颜色与光效").font(.title3.weight(.semibold))
+                settingsSegments("主题", selection: $music.notchLyrics.theme, choices: ["System", "Light", "Dark"]) {
+                    switch $0 {
+                    case "Light": "日间"
+                    case "Dark": "夜间"
+                    default: "跟随系统"
+                    }
+                }
+                percentControl("文字柔影", value: $music.notchLyrics.shadow, range: 0...1)
+                Toggle("浅色模式减弱文字阴影", isOn: $music.notchLyrics.reducesLightTextShadow)
+                Toggle("歌词颜色跟随封面", isOn: $music.notchLyrics.useCoverColors)
+                if !music.notchLyrics.useCoverColors {
+                    ColorPicker("歌词颜色", selection: hexColor($music.notchLyrics.lyricColor, fallback: 0xD7EEE6), supportsOpacity: false)
+                }
+                percentControl("译文与下一句不透明度", value: $music.notchLyrics.translationOpacity,
+                               range: NotchLyricsOptions.translationOpacityRange)
+                Toggle("系统液态玻璃", isOn: $music.notchLyrics.usesSystemGlassBorder)
+                if !music.notchLyrics.usesSystemGlassBorder {
+                    Toggle("面板描边跟随封面取色", isOn: $music.notchLyrics.tintsBorderFromCover)
+                    percentControl("面板描边强度", value: $music.notchLyrics.borderIntensity, range: 0...1)
+                }
+                Toggle("Lumi 歌词流光", isOn: $music.notchLyrics.glow)
+                HStack(spacing: 20) {
+                    lyricSettingSlider("收起流光速度", value: $music.notchLyrics.compactGlowSpeed,
+                                       range: NotchLyricsOptions.glowSpeedRange, step: 0.1, unit: "×")
+                    lyricSettingSlider("展开流光速度", value: $music.notchLyrics.expandedGlowSpeed,
+                                       range: NotchLyricsOptions.glowSpeedRange, step: 0.1, unit: "×")
+                }.disabled(!music.notchLyrics.glow)
+                Toggle("HDR 歌词高亮", isOn: $music.notchLyrics.usesHDRLyricHighlights)
+                    .toggleStyle(.checkbox)
+                    .help("支持 HDR 的屏幕可在夜间模式提亮逐字高亮。")
+            }
+            Divider()
+            VStack(alignment: .leading, spacing: 11) {
+                Text("歌词内容与片头").font(.title3.weight(.semibold))
+                Toggle("显示译文", isOn: $music.notchLyrics.showTranslation)
+                Toggle("长歌词自动分段", isOn: $music.notchLyrics.splitLongLines)
+                Toggle("逐字高亮（卡拉 OK）", isOn: $music.notchLyrics.karaoke)
+                Toggle("无倒计时的前奏显示歌名和歌手", isOn: $music.notchLyrics.showIntroMetadata)
+                Toggle("前奏与间奏三点倒计时", isOn: $music.notchLyrics.showCountdown)
+            }
+        }
+    }
+
+    private var aboutPage: some View {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? ""
+        return VStack(alignment: .leading, spacing: 18) {
+            HStack(spacing: 14) {
+                Image(nsImage: NSApplication.shared.applicationIconImage)
+                    .resizable().scaledToFit().frame(width: 56, height: 56)
+                    .accessibilityHidden(true)
+                heading("LumiBar", "macOS 版 · \(version) (\(build))")
+            }
+            Text("天气、音乐与歌词，留在菜单栏。").foregroundStyle(.secondary)
+            Divider()
+            aboutItem("制作人", "Ma Guanqun with Codex")
+            aboutItem("前端", "SwiftUI · AppKit · Liquid Glass")
+            aboutItem("后端", "Swift · 系统媒体事件 · 本地偏好设置")
+            aboutItem("天气与空气", "和风天气代理 · Open-Meteo · MET Norway\n空气质量按数据源标注 · macOS 定位服务")
+            aboutItem("音乐与歌词", "macOS 正在播放 · 系统音频频谱\n在线逐字与同步歌词 · 本地 LRC 和 TTML")
+            aboutItem("默认字体", "中文为 macOS 系统字体，西文为内置 Geist。")
+            VStack(alignment: .leading, spacing: 5) {
+                Text("特别鸣谢").font(.headline)
+                Link("LyriMuse", destination: URL(string: "https://github.com/Yudaotor/lyrimuse")!)
+                    .foregroundStyle(Color.accentColor)
+                Text("歌词匹配、歌词源和管理流程参考。").font(.subheadline).foregroundStyle(.secondary)
+            }
+            Link("在 GitHub 上查看 LumiBar", destination: URL(string: "https://github.com/mgqlfc/LumiBar-public")!)
+                .foregroundStyle(Color.accentColor)
+        }
+    }
+
+    private func aboutItem(_ title: String, _ detail: String) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(title).font(.headline)
+            Text(detail).font(.subheadline).foregroundStyle(.secondary)
+        }
+    }
+
+    private func lyricSettingSlider(_ label: String, value: Binding<Double>, range: ClosedRange<Double>,
+                                    step: Double, unit: String = "pt", signed: Bool = false) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack {
+                Text(label).font(.subheadline.weight(.medium))
+                Spacer(minLength: 8)
+                Text(value.wrappedValue.formatted(.number.precision(.fractionLength(0...1))
+                    .sign(strategy: signed ? .always(includingZero: false) : .automatic)) + " " + unit)
+                    .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+            }
+            Slider(value: value, in: range, step: step).accessibilityLabel(label)
+        }.frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func hexColor(_ value: Binding<String>, fallback: UInt32) -> Binding<Color> {
+        Binding {
+            let digits = value.wrappedValue.trimmingCharacters(in: CharacterSet(charactersIn: "#"))
+            return Color.rgb(UInt32(digits, radix: 16) ?? fallback)
+        } set: { color in
+            guard let rgb = NSColor(color).usingColorSpace(.sRGB) else { return }
+            let channels = [rgb.redComponent, rgb.greenComponent, rgb.blueComponent]
+                .map { Int((min(1, max(0, $0)) * 255).rounded()) }
+            value.wrappedValue = String(format: "#%02X%02X%02X", channels[0], channels[1], channels[2])
+        }
     }
 }
 
 
-private struct SettingsThemeStyle: ButtonStyle {
-    let selected: Bool
-    let color: Color
-    @ViewState private var hovered = false
+struct LyricSourceLabel: View {
+    let source: MusicModel.LyricSource
 
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .background(color.opacity(selected ? (hovered ? 0.32 : 0.24) : hovered ? 0.10 : 0), in: Capsule())
-            .onHover { hovered = $0 }
-    }
-}
-
-private struct SettingsNavigationStyle: ButtonStyle {
-    let selected: Bool
-    let color: Color
-    @ViewState private var hovered = false
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .background(color.opacity(selected ? (hovered ? 0.30 : 0.22) : hovered ? 0.10 : 0),
-                        in: RoundedRectangle(cornerRadius: 9))
-            .onHover { hovered = $0 }
+    var body: some View {
+        HStack(spacing: 6) {
+            Text(source.title)
+            if source.supportsWordTiming {
+                Text("支持逐字").font(.caption).foregroundStyle(.secondary)
+            }
+        }
     }
 }
 
@@ -449,18 +774,25 @@ private struct FontChoice: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title).font(.headline)
-            Button(family.isEmpty ? "默认：\(defaultName)" : family) { searching.toggle() }
+            Button { searching.toggle() } label: {
+                Text(family.isEmpty ? "默认：\(defaultName)" : family).lineLimit(1)
+            }
+                .buttonStyle(.glass)
+                .accessibilityIdentifier("LumiBar.font." + title)
                 .popover(isPresented: $searching) {
                     let names = NSFontManager.shared.availableFontFamilies
                     let results = query.isEmpty ? names : names.filter { $0.localizedCaseInsensitiveContains(query) }
                     VStack(alignment: .leading, spacing: 10) {
-                        TextField("搜索已安装字体", text: $query)
+                        TextField("搜索已安装字体", text: $query).textFieldStyle(.roundedBorder)
                         List(results, id: \.self) { name in
                             Button(name) { family = name; searching = false }.buttonStyle(.plain)
                         }
                     }.padding(13).frame(width: 290, height: 290)
                 }
-            Button("恢复默认：\(defaultName)") { family = "" }.disabled(family.isEmpty)
+            Button("恢复默认：\(defaultName)") { family = "" }
+                .buttonStyle(.glass)
+                .accessibilityIdentifier("LumiBar.font.reset." + title)
+                .disabled(family.isEmpty)
         }
     }
 }

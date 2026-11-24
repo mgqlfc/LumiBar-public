@@ -1,6 +1,7 @@
 # Track source directories explicitly; local experiments and releases stay local.
 /*
 !/.gitignore
+!/AGENTS.md
 !/.gitattributes
 !/README.md
 !/DISTRIBUTION.md

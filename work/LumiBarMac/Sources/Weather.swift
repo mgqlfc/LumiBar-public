@@ -13,6 +13,42 @@ struct City: Codable, Hashable, Identifiable {
     var coordinates: CLLocationCoordinate2D { .init(latitude: latitude, longitude: longitude) }
 }
 
+enum WeatherWindUnit: String, CaseIterable {
+    case kilometersPerHour, metersPerSecond, beaufort
+
+    var title: String {
+        switch self {
+        case .kilometersPerHour: "km/h"
+        case .metersPerSecond: "m/s"
+        case .beaufort: "风力等级"
+        }
+    }
+}
+
+enum WeatherDetailItem: String, CaseIterable {
+    case current, temperatureRange, feelsLike, alerts, precipitation, hourly, daily
+    case humidity, wind, airQuality, pressure, ultraviolet
+
+    static let readings: [Self] = [.humidity, .wind, .airQuality, .pressure, .ultraviolet]
+
+    var title: String {
+        switch self {
+        case .current: "实况天气"
+        case .temperatureRange: "今日最高和最低温"
+        case .feelsLike: "体感温度"
+        case .alerts: "天气预警"
+        case .precipitation: "未来 1 小时降水"
+        case .hourly: "未来 24 小时"
+        case .daily: "10 天天气预报"
+        case .humidity: "湿度"
+        case .wind: "风速与风向"
+        case .airQuality: "空气质量"
+        case .pressure: "气压"
+        case .ultraviolet: "紫外线"
+        }
+    }
+}
+
 struct Weather: Codable {
     struct Hour: Codable {
         let time: String
@@ -44,6 +80,13 @@ struct Weather: Codable {
         let cancelled: Bool?
     }
 
+    struct AlertGroup: Identifiable {
+        let event: String
+        let level: String
+        let notices: [Alert]
+        var id: String { event }
+    }
+
     struct Rain: Codable {
         struct Interval: Codable {
             let start: String
@@ -70,7 +113,7 @@ struct Weather: Codable {
     let code: Int
     let humidity: Double
     let wind: Double
-    let windDirection: Double
+    let windDirection: Double?
     let rain: Double?
     let hours: [Hour]
     let days: [Day]
@@ -90,6 +133,13 @@ struct Weather: Codable {
     var providerNote: [String]? = nil
     var aqiCategory: String? = nil
 
+    var windLevel: Int? {
+        guard wind.isFinite, wind >= 0 else { return nil }
+        // Lower bounds in km/h for QWeather's standard and extended Beaufort scale.
+        let bounds: [Double] = [2, 6, 12, 20, 29, 39, 50, 62, 75, 89, 103, 118, 134, 150, 167, 184, 202, 221]
+        return bounds.firstIndex { wind < $0 } ?? bounds.count
+    }
+
     var aqiCaption: String {
         guard let aqi else { return "暂无数据" }
         if let aqiCategory, !aqiCategory.isEmpty { return aqiCategory }
@@ -100,18 +150,40 @@ struct Weather: Codable {
         return aqiStandard == "CN AQI" ? (aqi <= 300 ? "重度污染" : "严重污染") : "很不健康"
     }
 
-    func currentAlerts(at now: Date = .now) -> [Alert] {
+    func currentAlertGroups(at now: Date = .now) -> [AlertGroup] {
         let ranks = ["red": 4, "orange": 3, "yellow": 2, "blue": 1]
-        return Dictionary(grouping: alerts ?? [], by: \.id).values
-            .compactMap { $0.max { ($0.issuedAt.flatMap(WeatherAPI.date) ?? .distantPast) <
-                ($1.issuedAt.flatMap(WeatherAPI.date) ?? .distantPast) } }
-            .filter { alert in
-                let issued = alert.issuedAt.flatMap(WeatherAPI.date)
+        let revisions = (alerts ?? []).compactMap { alert -> (alert: Alert, issued: Date)? in
+            let issued = alert.issuedAt.flatMap(WeatherAPI.date) ?? .distantPast
+            return issued <= now ? (alert, issued) : nil
+        }
+        let current = Dictionary(grouping: revisions, by: { $0.alert.id }).values
+            .compactMap { revisions in
+                revisions.max {
+                    if $0.issued != $1.issued { return $0.issued < $1.issued }
+                    return $0.alert.cancelled != true && $1.alert.cancelled == true
+                }
+            }
+            .filter { revision in
+                let alert = revision.alert
                 let begins = alert.startsAt.flatMap(WeatherAPI.date) ?? .distantPast
-                let ends = alert.endsAt.flatMap(WeatherAPI.date) ?? issued?.addingTimeInterval(86400)
-                return !alert.event.isEmpty && alert.cancelled != true && begins <= now &&
-                    (issued ?? .distantPast) <= now && (ends ?? .distantPast) > now
-            }.sorted { ranks[$0.level, default: 0] > ranks[$1.level, default: 0] }
+                let ends = alert.endsAt.flatMap(WeatherAPI.date) ?? revision.issued.addingTimeInterval(86400)
+                return !alert.event.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+                    alert.cancelled != true && begins <= now && ends > now
+            }
+            .sorted {
+                let lhs = ranks[$0.alert.level, default: 0], rhs = ranks[$1.alert.level, default: 0]
+                if lhs != rhs { return lhs > rhs }
+                if $0.issued != $1.issued { return $0.issued > $1.issued }
+                return $0.alert.id < $1.alert.id
+            }
+            .map(\.alert)
+        let noticesByEvent = Dictionary(grouping: current) { $0.event.trimmingCharacters(in: .whitespacesAndNewlines) }
+        var seen = Set<String>()
+        return current.compactMap { alert in
+            let event = alert.event.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard seen.insert(event).inserted, let notices = noticesByEvent[event] else { return nil }
+            return AlertGroup(event: event, level: alert.level, notices: notices)
+        }
     }
 
     static func appearance(_ code: Int, day: Bool? = nil) -> (name: String, symbol: String, color: Color) {

@@ -36,7 +36,15 @@ actor NeteaseBridge {
     private struct Progress {
         let position: Double
         let duration: Double
-        let slider: AXUIElement?
+    }
+
+    private struct SystemTimeline {
+        let labels: [String]
+        let fraction: Double
+
+        func matches(title: String, artists: [String]) -> Bool {
+            labels.contains { NeteaseBridge.matchesSystemTrack($0, title: title, artists: artists) }
+        }
     }
 
     private struct PlayerView {
@@ -60,18 +68,20 @@ actor NeteaseBridge {
     private static let playNames = ["播放", "开始播放", "Play", "Resume"]
     private static let pauseNames = ["暂停", "Pause"]
     private static let previousNames = ["上一首", "上一曲", "上一首歌曲", "上一个", "Previous", "Previous Track", "Previous Song"]
-    private static let toggleNames = ["播放/暂停", "播放 / 暂停", "Play/Pause", "Play / Pause"]
     private static let nextNames = ["下一首", "下一曲", "下一首歌曲", "下一个", "Next", "Next Track", "Next Song"]
     private var lastTrack: Track?
     private var lastProgress: Progress?
     private let logger = Logger(subsystem: "com.lumibar.macos", category: "netease")
     private var lastDiagnostic: String?
     private var cachedPlayer: (pid_t, AXUIElement)?
+    private var systemMenu: (pid_t, AXUIElement)?
+    private var systemSession: (catalog: CatalogTrack, historyID: String?)?
+    private var systemClock: (track: Track, fraction: Double)?
     private var cachedBar: AXUIElement?
     private var accessibilityActivated = false
     private var queueCache: (url: URL, date: Date, tracks: [CatalogTrack])?
 
-    func read(pid: pid_t, trusted: Bool) -> Track? {
+    func read(pid: pid_t, trusted: Bool, menuBarPID: pid_t? = nil) -> Track? {
         let now = Date.now
         let app = application(pid)
         if trusted && !accessibilityActivated {
@@ -91,7 +101,6 @@ actor NeteaseBridge {
         let pause = item(named: Self.pauseNames, in: available)
         let play = item(named: Self.playNames, in: available)
         let state = pause.flatMap { enabled($0) ? true : nil } ?? play.map { _ in false }
-        let canControl = pause != nil || play != nil || item(named: Self.toggleNames, in: available) != nil
         let playback = AudioPlayback.applicationObjects(pid: pid, bundleID: Player.netease.rawValue)
         let hasAudio = AudioPlayback.hasOutput(playback)
         let progress = view?.progress
@@ -99,19 +108,48 @@ actor NeteaseBridge {
         let playing = state ?? inferred ?? hasAudio
         lastProgress = progress
 
-        let track: Track?
-        if let current = view?.track {
-            track = makeTrack(current, progress: progress, history: history, now: now, pid: pid,
-                              playing: playing, canControl: canControl)
-        } else if let newest = history.first, let started = newest.started,
-                  let confirmed = estimate(newest.track, started: started, now: now, pid: pid,
-                                           playing: playing, hasAudio: hasAudio, canControl: canControl) {
-            track = confirmed
-        } else {
-            track = nil
+        if systemMenu?.0 != menuBarPID {
+            systemMenu = menuBarPID.map { pid in
+                let application = AXUIElementCreateApplication(pid)
+                AXUIElementSetMessagingTimeout(application, 0.2)
+                return (pid, application)
+            }
+        }
+        let timeline = trusted ? nowPlayingPanel().flatMap(systemTimeline) : nil
+        let newest = history.first
+        let current = view?.track ?? timeline.flatMap { timeline in
+            let matching = matchingCatalogTrack(in: catalog, newest: newest?.track, timeline: timeline)
+            return matching.flatMap { song in
+                playing || hasAudio || song.id == lastTrack?.catalogID || song.id == newest?.track.id ? song : nil
+            }
         }
 
-        let diagnostic = "authorized=\(trusted) menu=\(canControl) bar=\(view != nil) liveTitle=\(view?.track != nil) elapsed=\(progress != nil) audio=\(hasAudio) track=\(track != nil)"
+        var track: Track?
+        if let current {
+            let candidate = makeTrack(current, progress: view?.track == nil ? nil : progress,
+                                      history: history, now: now, pid: pid, playing: playing)
+            if let timeline, timeline.matches(title: current.name, artists: current.artists.map(\.name)),
+               let synchronized = trackWithSystemPosition(candidate, timeline: timeline) {
+                track = synchronized
+                systemSession = (current, newest?.track.id)
+            } else {
+                track = candidate
+                systemSession = nil
+            }
+        } else if let session = systemSession, let previous = lastTrack,
+                  previous.catalogID == session.catalog.id, previous.position(at: now) < previous.duration,
+                  newest?.track.id == session.historyID || newest?.track.id == session.catalog.id {
+            // Keep the clock from the verified song when the system flyout closes.
+            track = makeTrack(session.catalog, progress: nil, history: history, now: now, pid: pid, playing: playing)
+        } else {
+            systemSession = nil
+            if let newest, let started = newest.started {
+                track = estimate(newest.track, started: started, now: now, pid: pid,
+                                 playing: playing, hasAudio: hasAudio)
+            }
+        }
+
+        let diagnostic = "authorized=\(trusted) bar=\(view != nil) liveTitle=\(view?.track != nil) elapsed=\(track?.estimatedPosition == false) audio=\(hasAudio) track=\(track != nil)"
         if lastDiagnostic != diagnostic {
             logger.notice("\(diagnostic, privacy: .public)")
             lastDiagnostic = diagnostic
@@ -123,8 +161,26 @@ actor NeteaseBridge {
         return track
     }
 
+    private func trackWithSystemPosition(_ track: Track, timeline: SystemTimeline) -> Track? {
+        guard track.duration.isFinite, track.duration > 0 else { return nil }
+        let now = Date.now
+        let position: Double
+        if let clock = systemClock, clock.track.key == track.key, clock.track.pid == track.pid,
+           clock.track.duration == track.duration, clock.fraction == timeline.fraction {
+            // SwiftUI's system slider can keep returning the same value while playback continues.
+            position = clock.track.position(at: now)
+        } else {
+            position = timeline.fraction * track.duration
+        }
+        var synchronized = track
+        synchronized.setPlaybackPosition(position, at: now)
+        synchronized.estimatedPosition = false
+        systemClock = (synchronized, timeline.fraction)
+        return synchronized
+    }
+
     private func makeTrack(_ catalog: CatalogTrack, progress: Progress?, history: [History], now: Date, pid: pid_t,
-                           playing: Bool, canControl: Bool) -> Track {
+                           playing: Bool) -> Track {
         let duration = progress?.duration ?? Double(catalog.duration) / 1000
         let previous = lastTrack.flatMap { $0.catalogID != nil && $0.catalogID == catalog.id ? $0 : nil }
         let started = history.first(where: { $0.track.id != nil && $0.track.id == catalog.id })?.started
@@ -134,61 +190,78 @@ actor NeteaseBridge {
         return Track(player: .netease, title: catalog.name, artist: artist(catalog) ?? "",
                      album: catalog.album?.name ?? "", duration: duration, position: position,
                      playing: playing, artworkURL: catalog.album?.picUrl.flatMap(Self.artworkURL), pid: pid,
-                     observedAt: now, catalogID: catalog.id, canSeek: progress?.slider.map(isWritable) ?? false,
-                     canControl: canControl, estimatedPosition: progress == nil)
+                     observedAt: now, catalogID: catalog.id, estimatedPosition: progress == nil)
     }
 
     private func estimate(_ catalog: CatalogTrack, started: Date, now: Date, pid: pid_t, playing: Bool,
-                          hasAudio: Bool, canControl: Bool) -> Track? {
+                          hasAudio: Bool) -> Track? {
         let duration = Double(catalog.duration) / 1000
         let age = now.timeIntervalSince(started)
-        guard duration > 0, (-5...duration).contains(age) else { return nil }
-        // A recent history entry on its own can be from a closed or paused player.
         let previous = lastTrack.flatMap { $0.catalogID == catalog.id ? $0 : nil }
         guard playing || hasAudio || previous != nil else { return nil }
-        let seconds: Double
-        if let previous {
-            seconds = previous.position(at: now)
-        } else {
-            seconds = min(duration, max(0, age))
-        }
+        let previousPosition = previous?.position(at: now)
+        // The player can run past the time predicted from history after a pause or rewind.
+        guard duration > 0, (-5...duration).contains(age) || (previousPosition ?? duration) < duration else { return nil }
+        let seconds = previousPosition ?? min(duration, max(0, age))
         return Track(player: .netease, title: catalog.name, artist: artist(catalog) ?? "",
                      album: catalog.album?.name ?? "", duration: duration, position: seconds,
                      playing: playing, artworkURL: catalog.album?.picUrl.flatMap(Self.artworkURL),
-                     pid: pid, observedAt: now, catalogID: catalog.id, canSeek: false,
-                     canControl: canControl, estimatedPosition: true)
+                     pid: pid, observedAt: now, catalogID: catalog.id, estimatedPosition: true)
     }
 
     private func artist(_ catalog: CatalogTrack?) -> String? {
         catalog?.artists.map(\.name).filter { !$0.isEmpty }.joined(separator: " / ")
     }
 
-    func control(_ command: PlaybackCommand, pid: pid_t) -> Bool {
-        guard AXIsProcessTrusted() else { return false }
-        let app = application(pid)
-        let live = cachedBar.map { scan($0, catalog: []) }
-        if case .seek(let seconds) = command {
-            guard let progress = live?.progress, let slider = progress.slider,
-                  isWritable(slider), seconds.isFinite else { return false }
-            return AXUIElementSetAttributeValue(slider, kAXValueAttribute as CFString,
-                                               NSNumber(value: min(progress.duration, max(0, seconds)))) == .success
+    private func nowPlayingPanel() -> AXUIElement? {
+        guard let (_, host) = systemMenu,
+              let windows = attribute(host, kAXWindowsAttribute) as? [AXUIElement],
+              let hud = windows.first(where: { attribute($0, kAXIdentifierAttribute) as? String == "ax-center-hud-window" })
+        else { return nil }
+        return children(hud).first { node in
+            guard attribute(node, kAXRoleAttribute) as? String == kAXGroupRole,
+                  let label = attribute(node, kAXDescriptionAttribute) as? String else { return false }
+            return ["now playing", "正在播放", "现正播放"].contains(Self.normalizedText(label))
         }
-        let candidates = controls(app) + (live?.controls ?? [])
-        let names: [String] = switch command {
-        case .toggle: Self.pauseNames + Self.playNames + Self.toggleNames
-        case .previous: Self.previousNames
-        case .next: Self.nextNames
-        case .seek: []
+    }
+
+    private func systemTimeline(in panel: AXUIElement) -> SystemTimeline? {
+        let candidates = nodes(panel, depth: 6, budget: 48).filter { node in
+            attribute(node, kAXRoleAttribute) as? String == kAXSliderRole &&
+            attribute(node, kAXIdentifierAttribute) as? String == "track.progress"
         }
-        for name in names {
-            if let control = item(named: [name], in: candidates), enabled(control),
-               AXUIElementPerformAction(control, kAXPressAction as CFString) == .success {
-                logger.notice("NetEase playback command accepted by the player")
-                return true
-            }
+        guard candidates.count == 1, let slider = candidates.first, let parent = element(slider, kAXParentAttribute),
+              let fraction = (attribute(slider, kAXValueAttribute) as? NSNumber)?.doubleValue,
+              (0...1).contains(fraction) else { return nil }
+        let labels = children(parent).flatMap { sibling -> [String] in
+            let role = attribute(sibling, kAXRoleAttribute) as? String
+            guard role == kAXStaticTextRole || role == "AXUnknown" else { return [] }
+            return [kAXValueAttribute, kAXDescriptionAttribute].compactMap { attribute(sibling, $0) as? String }
         }
-        logger.notice("NetEase playback command has no matching accessible control")
-        return false
+        return labels.isEmpty ? nil : SystemTimeline(labels: labels, fraction: fraction)
+    }
+
+    private func matchingCatalogTrack(in catalog: [CatalogTrack], newest: CatalogTrack?, timeline: SystemTimeline) -> CatalogTrack? {
+        func matches(_ song: CatalogTrack) -> Bool {
+            song.duration > 0 && timeline.matches(title: song.name, artists: song.artists.map(\.name))
+        }
+        if let current = systemSession?.catalog, matches(current) { return current }
+        if let newest, matches(newest) { return newest }
+        let matching = catalog.filter(matches)
+        return Set(matching.compactMap(\.id)).count <= 1 ? matching.first : nil
+    }
+
+    private static func matchesSystemTrack(_ text: String, title: String, artists: [String]) -> Bool {
+        let label = normalizedText(text)
+        let title = normalizedText(title)
+        guard !title.isEmpty else { return false }
+        let artists = artists.map(normalizedText).filter { !$0.isEmpty }
+        if label == title { return artists.isEmpty }
+        guard label.hasPrefix(title) else { return false }
+        let suffix = label.dropFirst(title.count)
+        guard let delimiter = suffix.first, "、,，".contains(delimiter) else { return false }
+        let credits = suffix.dropFirst().split { "、,，/".contains($0) }.map { normalizedText(String($0)) }
+        return artists.allSatisfy(credits.contains)
     }
 
     private func application(_ pid: pid_t) -> AXUIElement {
@@ -197,6 +270,8 @@ actor NeteaseBridge {
         AXUIElementSetMessagingTimeout(application, 0.35)
         lastTrack = nil
         lastProgress = nil
+        systemSession = nil
+        systemClock = nil
         cachedBar = nil
         accessibilityActivated = false
         cachedPlayer = (pid, application)
@@ -299,7 +374,7 @@ actor NeteaseBridge {
                 let maximum = (attribute(node, kAXMaxValueAttribute) as? NSNumber)?.doubleValue
                 if let position, let maximum, maximum.isFinite, (15...86400).contains(maximum),
                    position.isFinite, (0...maximum).contains(position) {
-                    slider = .init(position: position, duration: maximum, slider: node)
+                    slider = .init(position: position, duration: maximum)
                 }
                 continue
             }
@@ -310,7 +385,7 @@ actor NeteaseBridge {
                     guard let value = attribute(node, key) as? String else { continue }
                     let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
                     if let (position, length) = Self.parseTimePair(trimmed) {
-                        progress = .init(position: position, duration: length, slider: nil)
+                        progress = .init(position: position, duration: length)
                     } else if trimmed.contains(":"), let seconds = Self.parseClock(trimmed[...]) {
                         if clocks.last != seconds { clocks.append(seconds) }
                     } else if !trimmed.isEmpty, trimmed.count <= 160, !labels.contains(trimmed) {
@@ -320,7 +395,7 @@ actor NeteaseBridge {
             }
         }
         if progress == nil, clocks.count == 2, clocks[1] > 0, clocks[0] <= clocks[1] {
-            progress = .init(position: clocks[0], duration: clocks[1], slider: nil)
+            progress = .init(position: clocks[0], duration: clocks[1])
         }
         if let old = progress, let slider, abs(old.duration - slider.duration) < 2 { progress = slider }
         let candidate = Self.matchTrack(labels: labels, duration: progress?.duration, catalog: catalog)
@@ -451,20 +526,65 @@ actor NeteaseBridge {
         return parts.url
     }
 
-    static func syncLyrics(trackID: String) async -> [Lyric] {
+    static func lyricsRecordings(for track: Track) async -> [LyricRecording] {
+        if track.player == .netease, let id = track.catalogID, Int64(id).map({ $0 > 0 }) == true {
+            return [LyricRecording(id: id, title: track.title, artist: track.artist,
+                                   album: track.album, duration: track.duration, confirmedID: true)]
+        }
+        return await searchLyricsRecordings(for: track)
+    }
+
+    static func syncLyrics(catalogID trackID: String?, for track: Track) async -> [Lyric] {
+        guard let trackID, !Task.isCancelled else { return [] }
         guard Int64(trackID).map({ $0 > 0 }) == true else { return [] }
         var endpoint = URLComponents(string: "https://music.163.com/api/song/lyric")!
-        endpoint.queryItems = [.init(name: "id", value: trackID), .init(name: "lv", value: "-1")]
+        endpoint.queryItems = [.init(name: "id", value: trackID), .init(name: "lv", value: "-1"),
+                               .init(name: "tv", value: "-1"), .init(name: "yv", value: "-1")]
         struct SongLyrics: Decodable {
             struct LRC: Decodable { let lyric: String? }
             let lrc: LRC?
+            let tlyric: LRC?
+            let yrc: LRC?
+            let ytlrc: LRC?
         }
         var request = URLRequest(url: endpoint.url!, timeoutInterval: 6)
         request.setValue("https://music.163.com/", forHTTPHeaderField: "Referer")
         guard let (data, response) = try? await URLSession.shared.data(for: request),
               (response as? HTTPURLResponse)?.statusCode == 200, data.count <= 1_048_576,
-              let lyric = (try? JSONDecoder().decode(SongLyrics.self, from: data))?.lrc?.lyric else { return [] }
-        return Lyric.parse(lyric)
+              let result = try? JSONDecoder().decode(SongLyrics.self, from: data) else { return [] }
+        let lines = Lyric.parse(result.lrc?.lyric, translation: result.tlyric?.lyric,
+                                wordTiming: result.yrc?.lyric, wordTranslation: result.ytlrc?.lyric)
+        if Lyric.hasSyncedVocals(in: lines, for: track) { return lines }
+        return Lyric.parse(result.lrc?.lyric, translation: result.tlyric?.lyric)
+    }
+
+    private static func searchLyricsRecordings(for track: Track) async -> [LyricRecording] {
+        guard !LyricRecording.identity(track.title).isEmpty else { return [] }
+        struct SearchResponse: Decodable {
+            struct Result: Decodable { let songs: [CatalogTrack]? }
+            let result: Result?
+        }
+        func search(_ term: String) async -> [LyricRecording] {
+            var endpoint = URLComponents(string: "https://music.163.com/api/search/get/web")!
+            endpoint.queryItems = [.init(name: "s", value: term), .init(name: "type", value: "1"), .init(name: "limit", value: "15")]
+            guard let url = endpoint.url else { return [] }
+            var request = URLRequest(url: url, timeoutInterval: 3)
+            request.setValue("https://music.163.com/", forHTTPHeaderField: "Referer")
+            guard let (data, response) = try? await URLSession.shared.data(for: request), !Task.isCancelled,
+                  (response as? HTTPURLResponse)?.statusCode == 200, data.count <= 1_048_576,
+                  let songs = (try? JSONDecoder().decode(SearchResponse.self, from: data))?.result?.songs else { return [] }
+            let recordings = songs.compactMap { song -> LyricRecording? in
+                guard let id = song.id, Int64(id).map({ $0 > 0 }) == true else { return nil }
+                return LyricRecording(id: id, title: song.name, artist: song.artists.map(\.name).joined(separator: " "),
+                                      album: song.album?.name ?? "", duration: Double(song.duration) / 1000)
+            }
+            return Array(OnlineLyricCatalogs.matching(recordings, for: track).prefix(3))
+        }
+        if !track.artist.isEmpty {
+            let named = await search("\(track.title) \(track.artist)")
+            if !named.isEmpty || Task.isCancelled { return named }
+        }
+        return await search(track.title)
     }
 
     private func attribute(_ node: AXUIElement, _ key: String) -> CFTypeRef? {
@@ -492,11 +612,6 @@ actor NeteaseBridge {
 
     private func enabled(_ node: AXUIElement) -> Bool {
         (attribute(node, kAXEnabledAttribute) as? NSNumber)?.boolValue ?? true
-    }
-
-    private func isWritable(_ node: AXUIElement) -> Bool {
-        var writable = DarwinBoolean(false)
-        return AXUIElementIsAttributeSettable(node, kAXValueAttribute as CFString, &writable) == .success && writable.boolValue
     }
 
     private func children(_ node: AXUIElement) -> [AXUIElement] {

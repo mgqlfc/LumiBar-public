@@ -3,18 +3,17 @@ import CryptoKit
 import Foundation
 import SwiftUI
 
-enum Player: String, CaseIterable, Sendable {
-    case netease = "com.netease.163music"
-    case music = "com.apple.Music"
-    case spotify = "com.spotify.client"
+struct Player: Hashable, Sendable {
+    let rawValue: String
+    let name: String
 
-    var name: String {
-        switch self {
-        case .netease: "网易云音乐"
-        case .music: "Apple Music"
-        case .spotify: "Spotify"
-        }
-    }
+    static let netease = Self(rawValue: "com.netease.163music", name: "网易云音乐")
+    static let music = Self(rawValue: "com.apple.Music", name: "Apple Music")
+    static let spotify = Self(rawValue: "com.spotify.client", name: "Spotify")
+    static let allCases = [netease, music, spotify]
+
+    static func == (lhs: Self, rhs: Self) -> Bool { lhs.rawValue == rhs.rawValue }
+    func hash(into hasher: inout Hasher) { hasher.combine(rawValue) }
 }
 
 struct Track: Equatable, Sendable {
@@ -22,36 +21,39 @@ struct Track: Equatable, Sendable {
     let title: String
     let artist: String
     let album: String
-    let duration: Double
+    var duration: Double
     var position: Double
     let playing: Bool
     let artworkURL: URL?
     let pid: pid_t
-    let observedAt: Date
+    var observedAt: Date
     var catalogID: String? = nil
-    var canSeek = true
-    var canControl = true
     var estimatedPosition = false
+    var systemSession = false
+    var playbackRate = 1.0
+    var webDurationVerified = false
     var key: String {
         if player == .netease, let catalogID { return player.rawValue + "|" + catalogID }
         return [player.rawValue, title, artist, album, String(Int(duration))].joined(separator: "|")
     }
 
     func position(at now: Date) -> Double {
-        min(duration, max(0, position + (playing ? now.timeIntervalSince(observedAt) : 0)))
+        let elapsed = position + (playing ? now.timeIntervalSince(observedAt) * playbackRate : 0)
+        return min(duration > 0 ? duration : .infinity, max(0, elapsed))
     }
-}
 
-enum PlaybackCommand: Sendable {
-    case toggle, previous, next, seek(Double)
+    func displayPosition(at now: Date = .now, calibration: Double, frozen: Bool = false) -> Double {
+        let position = lyricPosition(at: now, offset: calibration, frozen: frozen)
+        return min(duration > 0 ? duration : .infinity, max(0, position))
+    }
 
-    var script: String {
-        switch self {
-        case .toggle: "playpause"
-        case .previous: "previous track"
-        case .next: "next track"
-        case .seek(let seconds): "set player position to \(max(0, seconds))"
-        }
+    func lyricPosition(at now: Date = .now, offset: Double, frozen: Bool = false) -> Double {
+        (frozen ? position : position(at: now)) + offset
+    }
+
+    mutating func setPlaybackPosition(_ seconds: Double, at now: Date = .now) {
+        position = min(duration > 0 ? duration : .infinity, max(0, seconds))
+        observedAt = now
     }
 }
 
@@ -89,16 +91,6 @@ enum PlayerBridge {
                                   duration: duration, position: number(parts[5]), playing: parts[0] == "playing",
                                   artworkURL: artworkURL, pid: pid, observedAt: .now))
         }
-    }
-
-    static func control(_ command: PlaybackCommand, player: Player) async -> Result<String, ScriptError> {
-        await run("""
-        with timeout of 4 seconds
-            tell application id "\(player.rawValue)"
-                if running then \(command.script)
-            end tell
-        end timeout
-        """)
     }
 
     static func artwork(for track: Track) async -> Data? {
@@ -172,10 +164,69 @@ enum PlayerBridge {
     }
 }
 
-struct Lyric: Identifiable, Sendable {
+struct Lyric: Identifiable, Sendable, Codable {
+    struct Word: Sendable, Codable, Equatable {
+        let time: Double
+        let duration: Double
+        let text: String
+    }
+
     let time: Double
     let text: String
+    var translation: String? = nil
+    var words: [Word] = []
     var id: Double { time }
+
+    var firstWordTime: Double? {
+        words.first { $0.time.isFinite && $0.time >= 0 &&
+            !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }?.time
+    }
+
+    var vocalStartTime: Double { firstWordTime ?? time }
+
+    var isVocalLine: Bool {
+        let spokenText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return time.isFinite && time >= 0 && !spokenText.isEmpty && !Self.isNonVocalText(spokenText)
+    }
+
+    static func isNonVocalText(_ text: String) -> Bool {
+        let credits = /^(?:作词|作曲|编曲|制作|演唱|歌手|词|曲|混音|录音|Lyrics by|Composed by)\s*[:：]/.ignoresCase()
+        let instrumental = /^(?:(?:此歌曲为)?(?:没有填词的)?纯音乐(?:[，,]\s*请(?:您)?欣赏)?|\[?instrumental(?:\s+version)?\]?|no lyrics(?: available)?)[。！!.]?$/
+            .ignoresCase()
+        return text.firstMatch(of: credits) != nil || text.firstMatch(of: instrumental) != nil
+    }
+
+    static func firstVocal(in lyrics: [Lyric], for track: Track, acceptsManualText: Bool = false) -> (index: Int, time: Double)? {
+        let title = track.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let artist = track.artist.trimmingCharacters(in: .whitespacesAndNewlines)
+        var manualFallback: (index: Int, time: Double)?
+        for (index, lyric) in lyrics.enumerated() {
+            let text = lyric.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty, lyric.time.isFinite, lyric.time >= 0 else { continue }
+            let isMetadata = isNonVocalText(text)
+            if isMetadata && !acceptsManualText { continue }
+            let wordTime = lyric.firstWordTime
+            let vocal = (index: index, time: wordTime ?? lyric.time)
+            if acceptsManualText {
+                if track.duration.isFinite, track.duration > 0, vocal.time >= track.duration { continue }
+                // Keep recognized headers out of the intro when a vocal line follows.
+                if manualFallback == nil { manualFallback = vocal }
+            }
+            if isMetadata { continue }
+            if wordTime != nil { return vocal }
+            if lyric.time <= 2,
+               text.compare(title, options: .caseInsensitive) == .orderedSame ||
+               text.compare(artist, options: .caseInsensitive) == .orderedSame { continue }
+            return vocal
+        }
+        return manualFallback
+    }
+
+    static func hasSyncedVocals(in lyrics: [Lyric], for track: Track, acceptsManualText: Bool = false) -> Bool {
+        guard let first = firstVocal(in: lyrics, for: track, acceptsManualText: acceptsManualText) else { return false }
+        return !track.duration.isFinite || track.duration <= 0 || first.time < track.duration
+    }
 
     static func parse(_ input: String) -> [Lyric] {
         guard input.utf8.count <= 1_048_576 else { return [] }
@@ -196,23 +247,65 @@ struct Lyric: Identifiable, Sendable {
         return lines.sorted(by: { $0.key < $1.key }).map { .init(time: $0.key, text: $0.value.joined(separator: "\n")) }
     }
 
-    struct Lookup: Sendable { let lines: [Lyric]; let provider: String }
-
-    static func fetch(_ track: Track) async -> Lookup? {
-        if track.player == .netease, let id = track.catalogID {
-            let lyrics = await NeteaseBridge.syncLyrics(trackID: id)
-            if !lyrics.isEmpty { return .init(lines: lyrics, provider: "网易云 ") }
-            if Task.isCancelled { return nil }
+    static func parse(_ original: String?, translation: String?, wordTiming: String? = nil,
+                      wordTranslation: String? = nil) -> [Lyric] {
+        let timedLines = wordTiming.map(parseWordTiming) ?? []
+        var lines = timedLines.isEmpty ? (original.map(parse) ?? []) : timedLines
+        if !timedLines.isEmpty, let wordTranslation {
+            addTranslations(parse(wordTranslation), to: &lines)
         }
-        var parts = URLComponents(string: "https://lrclib.net/api/get")!
-        parts.queryItems = [.init(name: "track_name", value: track.title), .init(name: "artist_name", value: track.artist),
-                            .init(name: "album_name", value: track.album),
-                            .init(name: "duration", value: String(Int(track.duration.rounded())))]
-        struct Response: Decodable { let syncedLyrics: String? }
-        guard let (data, response) = try? await URLSession.shared.data(for: URLRequest(url: parts.url!, timeoutInterval: 8)),
-              (response as? HTTPURLResponse)?.statusCode == 200,
-              let text = (try? JSONDecoder().decode(Response.self, from: data))?.syncedLyrics else { return nil }
-        return .init(lines: parse(text), provider: "LRCLIB ")
+        if let translation { addTranslations(parse(translation), to: &lines) }
+        return lines
+    }
+
+    private static func parseWordTiming(_ input: String) -> [Lyric] {
+        guard input.utf8.count <= 1_048_576 else { return [] }
+        let lineTag = /^\[(\d{1,9}),(\d{1,9})\]/
+        let wordTag = /\((\d{1,9}),(\d{1,9}),\d+\)/
+        var lines: [Double: Lyric] = [:]
+        for line in input.split(whereSeparator: \.isNewline) {
+            guard let header = line.firstMatch(of: lineTag), let start = Double(header.1),
+                  let duration = Double(header.2), duration > 0 else { continue }
+            let payload = line[header.range.upperBound...]
+            let tags = payload.matches(of: wordTag)
+            guard tags.first?.range.lowerBound == payload.startIndex else { continue }
+            var words: [Word] = []
+            for index in tags.indices {
+                let tag = tags[index]
+                let next = index + 1
+                let end = tags.indices.contains(next) ? tags[next].range.lowerBound : payload.endIndex
+                let text = payload[tag.range.upperBound..<end]
+                guard let wordStart = Double(tag.1), let wordDuration = Double(tag.2), !text.isEmpty else { continue }
+                words.append(.init(time: wordStart / 1000, duration: wordDuration / 1000, text: String(text)))
+            }
+            let text = words.map(\.text).joined()
+            guard !text.trimmingCharacters(in: .whitespaces).isEmpty else { continue }
+            let time = start / 1000
+            if lines[time] == nil { lines[time] = Lyric(time: time, text: text, words: words) }
+        }
+        return lines.values.sorted { $0.time < $1.time }
+    }
+
+    static func addTranslations(_ translated: [Lyric], to lines: inout [Lyric]) {
+        var index = 0
+        for line in lines.indices {
+            let time = lines[line].time
+            while translated.indices.contains(index + 1),
+                  abs(translated[index + 1].time - time) < abs(translated[index].time - time) {
+                index += 1
+            }
+            guard translated.indices.contains(index), abs(translated[index].time - time) <= 0.2 else { continue }
+            let nextLine = line + 1
+            let translatedTime = translated[index].time
+            if lines.indices.contains(nextLine), abs(lines[nextLine].time - translatedTime) < abs(time - translatedTime) {
+                continue
+            }
+            let candidate = translated[index].text
+            index += 1
+            if lines[line].translation == nil, candidate != lines[line].text.trimmingCharacters(in: .whitespaces) {
+                lines[line].translation = candidate
+            }
+        }
     }
 }
 

@@ -13,12 +13,12 @@ struct ReferenceRequest {
         var size: CGSize {
             switch self {
             case .weather, .alerts: .init(width: 512, height: 742)
-            case .hover: .init(width: 296, height: 192)
+            case .hover: WeatherView.hoverSize
             case .capsule: .init(width: 124, height: 54)
             case .lite: .init(width: 85, height: 54)
             case .wide: .init(width: 146, height: 54)
-            case .music: .init(width: 452, height: 682)
-            case .settings: .init(width: 592, height: 682)
+            case .music: MusicView.detailsSize
+            case .settings: SettingsView.windowSize
             }
         }
     }
@@ -49,7 +49,12 @@ enum PreviewData {
         struct Wide: Decodable { let temperature: Double; let feelsLike: Double; let rainProbabilityPercent: Double }
         struct Alert: Decodable { let event: String; let level: String }
         struct Media: Decodable {
-            struct Line: Decodable { let seconds: Double; let text: String }
+            struct Line: Decodable {
+                struct Word: Decodable { let seconds, duration: Double; let text: String }
+                let seconds: Double
+                let text: String
+                let words: [Word]?
+            }
             let title: String; let artist: String; let album: String; let playing: Bool
             let positionSeconds: Double; let durationSeconds: Double
             let accent: String; let secondaryAccent: String; let lyrics: [Line]; let spectrum: [Double]
@@ -106,7 +111,6 @@ enum PreviewData {
             source: w.sourceLabel, shortTermPrecipitation: trend, isDay: w.isDay, pressureHpa: w.pressureHpa, uvIndex: w.uvi,
             alerts: alerts, aqiStandard: w.aqiStandard, conditionText: w.condition, attributions: nil, aqiCategory: w.aqiCategory)
 
-        appearance.accentID = "blue"
         appearance.glassDensity = fixture.capture.glassDensity
         appearance.coverBlend = fixture.capture.glow
         appearance.coverSaturation = fixture.capture.saturation
@@ -117,11 +121,60 @@ enum PreviewData {
                             position: m.positionSeconds, playing: m.playing, artworkURL: nil, pid: 0, observedAt: .now)
         music.artwork = Bundle.main.url(forResource: "reference-cover", withExtension: "png", subdirectory: "Reference")
             .flatMap { NSImage(contentsOf: $0) }
-        music.colors = [m.accent, m.secondaryAccent].map { AccentPalette.color(UInt32($0.dropFirst(), radix: 16) ?? 0x71B6D7) }
+        music.colors = [m.accent, m.secondaryAccent].map { Color.rgb(UInt32($0.dropFirst(), radix: 16) ?? 0x71B6D7) }
         music.previewSpectrum = m.spectrum
-        music.lyrics = m.lyrics.map { Lyric(time: $0.seconds, text: $0.text) }
+        music.lyrics = m.lyrics.map { line in
+            Lyric(time: line.seconds, text: line.text, words: (line.words ?? []).map {
+                Lyric.Word(time: $0.seconds, duration: $0.duration, text: $0.text)
+            })
+        }
         music.lyricsProvider = "同步"
+        if let current = music.track {
+            music.lyricLibrary.populatePreview(libraryPreview(current: current, lines: music.lyrics))
+        }
         music.onTrackChange?()
         return clock
+    }
+
+    private static func libraryPreview(current: Track, lines: [Lyric]) -> [LyricLibraryEntry] {
+        var active = LyricLibraryEntry(track: current)
+        active.source = .local
+        active.lines = lines
+        let recording = LyricRecording(id: "preview", title: current.title, artist: current.artist,
+                                      album: current.album, duration: current.duration)
+        let sample = LyricCandidate(source: .local, recording: recording, lines: lines)
+        active.selectionID = sample.id
+        active.decisions = [LyricLibraryEntry.Decision(RankedLyric(candidate: sample, score: sample.score(for: current)))]
+
+        let another = Track(player: .music, title: "Somewhere After Midnight", artist: "LumiBar 预览", album: "Night Notes",
+                            duration: 183, position: 0, playing: false, artworkURL: nil, pid: 0, observedAt: .now)
+        var timed = LyricLibraryEntry(track: another)
+        timed.updated = .now.addingTimeInterval(-3600)
+        timed.source = .qqMusic
+        timed.translationSource = .qqMusic
+        timed.locked = true
+        timed.lines = [
+            Lyric(time: 12.2, text: "The city breathes", translation: "城市轻轻呼吸", words: [
+                .init(time: 12.2, duration: 0.35, text: "The "),
+                .init(time: 12.55, duration: 0.48, text: "city "),
+                .init(time: 13.03, duration: 0.70, text: "breathes"),
+            ]),
+            Lyric(time: 15.8, text: "Windows turn to stars", translation: "窗灯渐成星光", words: [
+                .init(time: 15.8, duration: 0.7, text: "Windows "),
+                .init(time: 16.5, duration: 0.4, text: "turn "),
+                .init(time: 16.9, duration: 0.3, text: "to "),
+                .init(time: 17.2, duration: 0.65, text: "stars"),
+            ]),
+        ]
+        let timedRecording = LyricRecording(id: "preview-timed", title: another.title, artist: another.artist,
+                                            album: another.album, duration: another.duration)
+        let timedCandidate = LyricCandidate(source: .qqMusic, recording: timedRecording, lines: timed.lines)
+        timed.selectionID = timedCandidate.id
+        timed.decisions = [LyricLibraryEntry.Decision(RankedLyric(candidate: timedCandidate, score: timedCandidate.score(for: another)))]
+        let missingTrack = Track(player: .music, title: "Quiet Horizon", artist: "LumiBar 预览", album: "Night Notes",
+                                 duration: 199, position: 0, playing: false, artworkURL: nil, pid: 0, observedAt: .now)
+        var missing = LyricLibraryEntry(track: missingTrack)
+        missing.updated = .now.addingTimeInterval(-7200)
+        return [active, timed, missing]
     }
 }

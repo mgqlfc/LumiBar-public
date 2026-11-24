@@ -1,0 +1,4 @@
+module QQMusicDES {
+    header "QQMusicDES.h"
+    export *
+}
